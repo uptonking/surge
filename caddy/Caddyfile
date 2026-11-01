@@ -1,0 +1,19 @@
+{
+	# ACME account email for all sites.
+	email {$SSL_EMAIL}
+
+	# Log to stdout (docker logs), warnings and up.
+	log {
+		level WARN
+		format console
+	}
+
+	# The verges (Hysteria2) service owns UDP 443 (QUIC). Disable HTTP/3
+	# so Caddy neither binds UDP 443 nor advertises it via alt-svc.
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Per-site configuration, one file per service.
+import sites/*.caddy

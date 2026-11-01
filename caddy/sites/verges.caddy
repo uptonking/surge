@@ -1,0 +1,24 @@
+# verges.{$DOMAIN_NAME} — public HTTPS site.
+# Exists primarily to obtain and renew the Let's Encrypt certificate that
+# the Hysteria2 service (verges) reuses for its QUIC listener.
+verges.{$DOMAIN_NAME} {
+	header X-Robots-Tag "noindex, nofollow"
+	respond "OK" 200
+
+	# Pin the issuer so the certificate storage path is deterministic:
+	# data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/...
+	# (Hysteria's config references that exact path. Do not remove.)
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+		}
+	}
+}
+
+# Internal masquerade backend for Hysteria2.
+# The verges container uses host networking, so it reaches caddy via
+# 127.0.0.1:443. rewriteHost makes caddy's host matcher match.
+127.0.0.1 {
+	tls internal
+	respond "<html><body><h1>It works!</h1></body></html>" 200
+}
