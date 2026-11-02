@@ -23,29 +23,30 @@ fi
 
 install_base_packages
 tune_os
-configure_firewall
 cleanup_legacy_services
 install_xray
 ensure_secrets
 load_env "${1:-}"
-refresh_hosts_cache
 
-# Render & validate Xray config
-mkdir -p /etc/xray
-render_template "${SURGE_ROOT}/services/xray/config.json.template" /etc/xray/config.json
-chmod 0600 /etc/xray/config.json
-/usr/local/bin/xray run -test -config /etc/xray/config.json >/dev/null
+# Xray VLESS + Reality + Vision service (enabled by default)
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	mkdir -p /etc/xray
+	render_template "${SURGE_ROOT}/services/xray/config.json.template" /etc/xray/config.json
+	chmod 0600 /etc/xray/config.json
+	/usr/local/bin/xray run -test -config /etc/xray/config.json >/dev/null
 
-# Install Xray init service (systemd or OpenRC)
-if [ "$INIT_SYSTEM" = "systemd" ]; then
-	render_template "${SURGE_ROOT}/services/systemd/xray.service.template" /etc/systemd/system/xray.service
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		render_template "${SURGE_ROOT}/services/systemd/xray.service.template" /etc/systemd/system/xray.service
+	else
+		render_template "${SURGE_ROOT}/services/openrc/xray.initd.template" /etc/init.d/xray
+	fi
+	svc_enable_and_restart xray
+	log "xray enabled and started on TCP :${VLESS_LISTEN_PORT} (public ${NODE_HOST}:${PUBLIC_VLESS_PORT})"
 else
-	render_template "${SURGE_ROOT}/services/openrc/xray.initd.template" /etc/init.d/xray
+	svc_disable_and_stop xray
 fi
-svc_enable_and_restart xray
-log "xray enabled and started on TCP :${VLESS_LISTEN_PORT} (public ${NODE_HOST}:${PUBLIC_VLESS_PORT})"
 
-# Optional gost relay service
+# Optional gost proxy/forwarder/relay service
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	install_gost
 	render_gost_config
@@ -61,6 +62,8 @@ else
 	rm -rf /etc/gost 2>/dev/null || true
 fi
 
+refresh_hosts_cache
+configure_firewall
 install_watchdog
 
 log "=== deploy complete ==="

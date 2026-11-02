@@ -12,7 +12,9 @@ detect_os
 detect_resources
 load_env "${1:-}"
 
-svc_enable_and_restart xray
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	svc_enable_and_restart xray
+fi
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	svc_enable_and_restart gost
 fi

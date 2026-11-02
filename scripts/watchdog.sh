@@ -14,12 +14,19 @@ load_env
 
 refresh_hosts_cache || true
 
-if ! svc_is_active xray || ! port_is_listening tcp "$VLESS_LISTEN_PORT"; then
-	svc_enable_and_restart xray >/dev/null 2>&1 || true
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	if ! svc_is_active xray || ! port_is_listening tcp "$VLESS_LISTEN_PORT"; then
+		svc_enable_and_restart xray >/dev/null 2>&1 || true
+	fi
 fi
 
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
-	if ! svc_is_active gost || ! port_is_listening tcp "$GOST_LISTEN_PORT"; then
+	gost_ok=1
+	svc_is_active gost || gost_ok=0
+	for p in $(gost_tcp_ports); do
+		port_is_listening tcp "$p" || gost_ok=0
+	done
+	if [ "$gost_ok" -eq 0 ]; then
 		svc_enable_and_restart gost >/dev/null 2>&1 || true
 	fi
 fi

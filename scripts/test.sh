@@ -51,36 +51,45 @@ done
 pass "POSIX sh syntax valid for all scripts"
 
 # 2. Xray config & service health
-[ -x /usr/local/bin/xray ] || fail "/usr/local/bin/xray not executable"
-/usr/local/bin/xray run -test -config /etc/xray/config.json >/dev/null || fail "/etc/xray/config.json validation failed"
-svc_is_active xray || fail "xray service is not active"
-svc_is_enabled xray || fail "xray service is not enabled on boot"
-port_is_listening tcp "$VLESS_LISTEN_PORT" || fail "xray is not listening on tcp/${VLESS_LISTEN_PORT}"
-pass "xray config valid, service running & boot-enabled, listening on tcp/${VLESS_LISTEN_PORT}"
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	[ -x /usr/local/bin/xray ] || fail "/usr/local/bin/xray not executable"
+	/usr/local/bin/xray run -test -config /etc/xray/config.json >/dev/null || fail "/etc/xray/config.json validation failed"
+	svc_is_active xray || fail "xray service is not active"
+	svc_is_enabled xray || fail "xray service is not enabled on boot"
+	port_is_listening tcp "$VLESS_LISTEN_PORT" || fail "xray is not listening on tcp/${VLESS_LISTEN_PORT}"
+	pass "xray config valid, service running & boot-enabled, listening on tcp/${VLESS_LISTEN_PORT}"
 
-# 3. Reality camouflage target reachability & /etc/hosts cache
-reality_host="${REALITY_DEST%:*}"
-grep -q "^# BEGIN SURGE HOSTS" /etc/hosts || fail "/etc/hosts missing SURGE HOSTS block"
-curl -4 -fsS --max-time 5 -o /dev/null "https://${reality_host}" || fail "REALITY_DEST https://${reality_host} unreachable"
-pass "REALITY target https://${reality_host} reachable and cached in /etc/hosts"
+	# 3. Reality camouflage target reachability & /etc/hosts cache
+	reality_host="${REALITY_DEST%:*}"
+	grep -q "^# BEGIN SURGE HOSTS" /etc/hosts || fail "/etc/hosts missing SURGE HOSTS block"
+	curl -4 -fsS --max-time 5 -o /dev/null "https://${reality_host}" || fail "REALITY_DEST https://${reality_host} unreachable"
+	pass "REALITY target https://${reality_host} reachable and cached in /etc/hosts"
+fi
 
 # 4. Optional gost relay checks
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	[ -x /usr/local/bin/gost ] || fail "/usr/local/bin/gost not executable"
 	[ -f /etc/gost/config.json ] || fail "missing /etc/gost/config.json"
+	/usr/local/bin/gost -C /etc/gost/config.json -O json >/dev/null || fail "/etc/gost/config.json validation failed"
 	svc_is_active gost || fail "gost service is not active"
 	svc_is_enabled gost || fail "gost service is not enabled on boot"
-	port_is_listening tcp "$GOST_LISTEN_PORT" || fail "gost is not listening on tcp/${GOST_LISTEN_PORT}"
-	pass "gost config valid, service running & boot-enabled, listening on tcp/${GOST_LISTEN_PORT}"
+	gports="$(gost_tcp_ports)"
+	for gp in $gports; do
+		port_is_listening tcp "$gp" || fail "gost is not listening on tcp/${gp}"
+	done
+	pass "gost config valid, service running & boot-enabled, listening on tcp/${gports}"
 fi
 
-# 5. Watchdog & kernel TCP BBR
+# 5. Watchdog & kernel TCP BBR (/etc/sysctl.d/99-bbr.conf)
 wstat="$(watchdog_status)"
 case "$wstat" in
 	active*) pass "watchdog ${wstat}" ;;
 	*)       fail "watchdog ${wstat}" ;;
 esac
 
+[ -f /etc/sysctl.d/99-bbr.conf ] || fail "missing /etc/sysctl.d/99-bbr.conf"
 cc="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+tfo="$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo 0)"
+rmem="$(sysctl -n net.ipv4.tcp_rmem 2>/dev/null | tr '\t' ' ' || echo unknown)"
 [ "$cc" = "bbr" ] || fail "expected tcp_congestion_control=bbr, got ${cc}"
-pass "kernel TCP BBR active (GOMEMLIMIT=${XRAY_GOMEMLIMIT}, GOGC=${GOGC}, GOMAXPROCS=${GOMAXPROCS})"
+pass "kernel 99-bbr.conf active (bbr, tfo=${tfo}, tcp_rmem='${rmem}', GOMEMLIMIT=${XRAY_GOMEMLIMIT})"

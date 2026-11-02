@@ -17,7 +17,9 @@ load_env "${1:-}"
 log "=== surge bootstrap: node=${NODE_NAME} os=${OS_PRETTY} init=${INIT_SYSTEM} mem=${MEM_MB}MiB ==="
 
 install_base_packages
-install_xray
-ensure_secrets
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	install_xray
+	ensure_secrets
+fi
 
 exec "${SCRIPT_DIR}/deploy.sh" "${NODE_NAME}"

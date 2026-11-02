@@ -9,6 +9,15 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 load_env "${1:-}"
 
+if [ "${XRAY_ENABLE:-1}" = "0" ]; then
+	printf '=== Client Config (%s) ===\n' "$DISPLAY_NAME"
+	printf 'Xray is disabled (XRAY_ENABLE=0).\n'
+	if [ "${GOST_ENABLE:-0}" = "1" ]; then
+		printf 'gost service args: %s\n' "$GOST_ARGS"
+	fi
+	exit 0
+fi
+
 if [ -z "${VLESS_UUID:-}" ] || [ -z "${REALITY_PUBLIC_KEY:-}" ]; then
 	die "VLESS_UUID or REALITY_PUBLIC_KEY missing in .env (run ./scripts/bootstrap.sh first)"
 fi

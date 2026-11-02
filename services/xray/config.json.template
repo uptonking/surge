@@ -65,6 +65,11 @@
       "streamSettings": {
         "sockopt": {
           "domainStrategy": "UseIPv4",
+          "happyEyeballs": {
+            "tryDelayMs": 250,
+            "maxConcurrentTry": 4,
+            "prioritizeIPv6": false
+          },
           "tcpFastOpen": true,
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},

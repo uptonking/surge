@@ -13,12 +13,16 @@ load_env "${1:-}"
 
 printf '=== Node: %s (%s) | OS: %s | Init: %s ===\n' "$NODE_NAME" "$NODE_HOST" "$OS_PRETTY" "$INIT_SYSTEM"
 
-xray_active="stopped"
-xray_enabled="disabled"
-svc_is_active xray && xray_active="running"
-svc_is_enabled xray && xray_enabled="enabled"
-printf 'xray     : %-8s (boot: %s, listen: 0.0.0.0:%s -> public %s:%s)\n' \
-	"$xray_active" "$xray_enabled" "$VLESS_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_VLESS_PORT"
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	xray_active="stopped"
+	xray_enabled="disabled"
+	svc_is_active xray && xray_active="running"
+	svc_is_enabled xray && xray_enabled="enabled"
+	printf 'xray     : %-8s (boot: %s, listen: 0.0.0.0:%s -> public %s:%s)\n' \
+		"$xray_active" "$xray_enabled" "$VLESS_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_VLESS_PORT"
+else
+	printf 'xray     : disabled (XRAY_ENABLE=0)\n'
+fi
 
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	gost_active="stopped"
@@ -56,7 +60,7 @@ df -Ph / | awk 'NR<=2'
 printf 'Effective Memory Limit: %s MiB (Xray GOMEMLIMIT=%s, GOGC=%s, GOMAXPROCS=%s)\n' \
 	"$MEM_MB" "$XRAY_GOMEMLIMIT" "$GOGC" "$GOMAXPROCS"
 
-if [ -n "${VLESS_UUID:-}" ] && [ -n "${REALITY_PUBLIC_KEY:-}" ]; then
+if [ "${XRAY_ENABLE:-1}" = "1" ] && [ -n "${VLESS_UUID:-}" ] && [ -n "${REALITY_PUBLIC_KEY:-}" ]; then
 	printf '\n'
 	"${SCRIPT_DIR}/client.sh"
 fi

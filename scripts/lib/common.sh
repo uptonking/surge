@@ -132,13 +132,17 @@ load_env() {
 	_cli_NODE_NAME="${NODE_NAME:-}"
 	_cli_DISPLAY_NAME="${DISPLAY_NAME:-}"
 	_cli_NODE_HOST="${NODE_HOST:-}"
+	_cli_XRAY_ENABLE="${XRAY_ENABLE:-}"
 	_cli_PUBLIC_VLESS_PORT="${PUBLIC_VLESS_PORT:-}"
 	_cli_VLESS_LISTEN_PORT="${VLESS_LISTEN_PORT:-}"
 	_cli_GOST_ENABLE="${GOST_ENABLE:-}"
 	_cli_GOST_LISTEN_PORT="${GOST_LISTEN_PORT:-}"
 	_cli_GOST_FORWARD_TCP="${GOST_FORWARD_TCP:-}"
 	_cli_GOST_FORWARD_UDP="${GOST_FORWARD_UDP:-}"
+	_cli_GOST_RULES="${GOST_RULES:-}"
+	_cli_GOST_CHAINS="${GOST_CHAINS:-}"
 	_cli_GOST_EXTRA_ARGS="${GOST_EXTRA_ARGS:-}"
+	_cli_GOST_CONFIG_TEMPLATE="${GOST_CONFIG_TEMPLATE:-}"
 
 	if [ -n "$arg_node" ]; then
 		printf '%s\n' "$arg_node" > "$NODE_FILE"
@@ -171,13 +175,17 @@ load_env() {
 	[ -n "$_cli_NODE_NAME" ] && NODE_NAME="$_cli_NODE_NAME"
 	[ -n "$_cli_DISPLAY_NAME" ] && DISPLAY_NAME="$_cli_DISPLAY_NAME"
 	[ -n "$_cli_NODE_HOST" ] && NODE_HOST="$_cli_NODE_HOST"
+	[ -n "$_cli_XRAY_ENABLE" ] && XRAY_ENABLE="$_cli_XRAY_ENABLE"
 	[ -n "$_cli_PUBLIC_VLESS_PORT" ] && PUBLIC_VLESS_PORT="$_cli_PUBLIC_VLESS_PORT"
 	[ -n "$_cli_VLESS_LISTEN_PORT" ] && VLESS_LISTEN_PORT="$_cli_VLESS_LISTEN_PORT"
 	[ -n "$_cli_GOST_ENABLE" ] && GOST_ENABLE="$_cli_GOST_ENABLE"
 	[ -n "$_cli_GOST_LISTEN_PORT" ] && GOST_LISTEN_PORT="$_cli_GOST_LISTEN_PORT"
 	[ -n "$_cli_GOST_FORWARD_TCP" ] && GOST_FORWARD_TCP="$_cli_GOST_FORWARD_TCP"
 	[ -n "$_cli_GOST_FORWARD_UDP" ] && GOST_FORWARD_UDP="$_cli_GOST_FORWARD_UDP"
+	[ -n "$_cli_GOST_RULES" ] && GOST_RULES="$_cli_GOST_RULES"
+	[ -n "$_cli_GOST_CHAINS" ] && GOST_CHAINS="$_cli_GOST_CHAINS"
 	[ -n "$_cli_GOST_EXTRA_ARGS" ] && GOST_EXTRA_ARGS="$_cli_GOST_EXTRA_ARGS"
+	[ -n "$_cli_GOST_CONFIG_TEMPLATE" ] && GOST_CONFIG_TEMPLATE="$_cli_GOST_CONFIG_TEMPLATE"
 
 	if [ -z "${DISPLAY_NAME:-}" ]; then
 		DISPLAY_NAME="$(printf '%s' "$NODE_NAME" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
@@ -191,30 +199,40 @@ load_env() {
 
 	GOST_ARGS=""
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
-		if [ -n "${GOST_FORWARD_TCP:-}" ]; then
-			for item in $(printf '%s' "$GOST_FORWARD_TCP" | tr ',' ' '); do
-				case "$item" in
-					*/*) lport="${item%%/*}"; target="${item#*/}" ;;
-					*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
-				esac
-				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
-			done
-		fi
-		if [ -n "${GOST_FORWARD_UDP:-}" ]; then
-			for item in $(printf '%s' "$GOST_FORWARD_UDP" | tr ',' ' '); do
-				case "$item" in
-					*/*) lport="${item%%/*}"; target="${item#*/}" ;;
-					*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
-				esac
-				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L udp://:${lport}/${target}?keepAlive=true&ttl=60s"
-			done
-		fi
-		if [ -n "${GOST_EXTRA_ARGS:-}" ]; then
-			GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }${GOST_EXTRA_ARGS}"
+		if [ -n "${GOST_CONFIG_TEMPLATE:-}" ]; then
+			GOST_ARGS="-C /etc/gost/config.json (from ${GOST_CONFIG_TEMPLATE})"
+		else
+			if [ -n "${GOST_FORWARD_TCP:-}" ]; then
+				for item in $(printf '%s' "$GOST_FORWARD_TCP" | tr ',' ' '); do
+					case "$item" in
+						*/*) lport="${item%%/*}"; target="${item#*/}" ;;
+						*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
+					esac
+					GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
+				done
+			fi
+			if [ -n "${GOST_FORWARD_UDP:-}" ]; then
+				for item in $(printf '%s' "$GOST_FORWARD_UDP" | tr ',' ' '); do
+					case "$item" in
+						*/*) lport="${item%%/*}"; target="${item#*/}" ;;
+						*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
+					esac
+					GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L udp://:${lport}/${target}?keepAlive=true&ttl=60s"
+				done
+			fi
+			if [ -n "${GOST_RULES:-}" ]; then
+				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }${GOST_RULES}"
+			fi
+			if [ -n "${GOST_CHAINS:-}" ]; then
+				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }${GOST_CHAINS}"
+			fi
+			if [ -n "${GOST_EXTRA_ARGS:-}" ]; then
+				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }${GOST_EXTRA_ARGS}"
+			fi
 		fi
 	fi
 
-	export NODE_NAME DISPLAY_NAME NODE_HOST PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
+	export NODE_NAME DISPLAY_NAME NODE_HOST XRAY_ENABLE PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
 	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID REALITY_SERVER_NAMES_JSON GOST_ARGS
 }
 
@@ -259,6 +277,9 @@ install_base_packages() {
 }
 
 install_xray() {
+	if [ "${XRAY_ENABLE:-1}" != "1" ]; then
+		return 0
+	fi
 	want_ver="${XRAY_VERSION#v}"
 	if [ -x /usr/local/bin/xray ]; then
 		cur_ver="$(/usr/local/bin/xray version 2>/dev/null | awk 'NR==1 {print $2}' || true)"
@@ -303,6 +324,9 @@ install_gost() {
 }
 
 ensure_secrets() {
+	if [ "${XRAY_ENABLE:-1}" != "1" ]; then
+		return 0
+	fi
 	if [ -f "$SECRETS_ENV" ]; then
 		# shellcheck disable=SC1090
 		. "$SECRETS_ENV"
@@ -359,13 +383,13 @@ render_template() {
 	mkdir -p "$(dirname "$dst")"
 	sed \
 		-e "s|\${VLESS_LISTEN_PORT}|$(escape_sed "${VLESS_LISTEN_PORT}")|g" \
-		-e "s|\${VLESS_UUID}|$(escape_sed "${VLESS_UUID}")|g" \
+		-e "s|\${VLESS_UUID}|$(escape_sed "${VLESS_UUID:-}")|g" \
 		-e "s|\${VLESS_EMAIL}|$(escape_sed "${VLESS_EMAIL}")|g" \
 		-e "s|\${REALITY_DEST}|$(escape_sed "${REALITY_DEST}")|g" \
 		-e "s|\${REALITY_SNI}|$(escape_sed "${REALITY_SNI}")|g" \
 		-e "s|\${REALITY_SERVER_NAMES_JSON}|$(escape_sed "${REALITY_SERVER_NAMES_JSON}")|g" \
-		-e "s|\${REALITY_PRIVATE_KEY}|$(escape_sed "${REALITY_PRIVATE_KEY}")|g" \
-		-e "s|\${REALITY_PUBLIC_KEY}|$(escape_sed "${REALITY_PUBLIC_KEY}")|g" \
+		-e "s|\${REALITY_PRIVATE_KEY}|$(escape_sed "${REALITY_PRIVATE_KEY:-}")|g" \
+		-e "s|\${REALITY_PUBLIC_KEY}|$(escape_sed "${REALITY_PUBLIC_KEY:-}")|g" \
 		-e "s|\${REALITY_MIN_CLIENT_VER}|$(escape_sed "${REALITY_MIN_CLIENT_VER}")|g" \
 		-e "s|\${REALITY_MAX_TIME_DIFF}|$(escape_sed "${REALITY_MAX_TIME_DIFF}")|g" \
 		-e "s|\${REALITY_SHORT_IDS_JSON}|$(escape_sed "${REALITY_SHORT_IDS_JSON}")|g" \
@@ -376,13 +400,30 @@ render_template() {
 		-e "s|\${GOMAXPROCS}|$(escape_sed "${GOMAXPROCS}")|g" \
 		-e "s|\${XRAY_GOMEMLIMIT}|$(escape_sed "${XRAY_GOMEMLIMIT}")|g" \
 		-e "s|\${GOST_GOMEMLIMIT}|$(escape_sed "${GOST_GOMEMLIMIT}")|g" \
+		-e "s|\${GOST_LISTEN_PORT}|$(escape_sed "${GOST_LISTEN_PORT}")|g" \
+		-e "s|\${GOST_FORWARD_TCP}|$(escape_sed "${GOST_FORWARD_TCP:-}")|g" \
+		-e "s|\${GOST_FORWARD_UDP}|$(escape_sed "${GOST_FORWARD_UDP:-}")|g" \
+		-e "s|\${GOST_LOG_LEVEL}|$(escape_sed "${GOST_LOG_LEVEL:-warn}")|g" \
 		-e "s|\${GOST_ARGS}|$(escape_sed "${GOST_ARGS}")|g" \
 		"$src" > "$dst"
 }
 
 render_gost_config() {
 	mkdir -p /etc/gost
-	set -- -C '{"log":{"level":"warn","output":"stderr"}}'
+	if [ -n "${GOST_CONFIG_TEMPLATE:-}" ]; then
+		tpl_path="$GOST_CONFIG_TEMPLATE"
+		case "$tpl_path" in
+			/*) ;;
+			*)  tpl_path="${SURGE_ROOT}/${tpl_path}" ;;
+		esac
+		[ -f "$tpl_path" ] || die "GOST_CONFIG_TEMPLATE not found: ${tpl_path}"
+		render_template "$tpl_path" /etc/gost/config.json
+		/usr/local/bin/gost -C /etc/gost/config.json -O json >/dev/null
+		chmod 0600 /etc/gost/config.json
+		return 0
+	fi
+
+	set -- -C "{\"log\":{\"level\":\"${GOST_LOG_LEVEL:-warn}\",\"output\":\"stderr\"}}"
 	if [ -n "${GOST_FORWARD_TCP:-}" ]; then
 		for item in $(printf '%s' "$GOST_FORWARD_TCP" | tr ',' ' '); do
 			case "$item" in
@@ -401,12 +442,35 @@ render_gost_config() {
 			set -- "$@" -L "udp://:${lport}/${target}?keepAlive=true&ttl=60s"
 		done
 	fi
+	if [ -n "${GOST_RULES:-}" ]; then
+		# shellcheck disable=SC2086
+		set -- "$@" $GOST_RULES
+	fi
+	if [ -n "${GOST_CHAINS:-}" ]; then
+		# shellcheck disable=SC2086
+		set -- "$@" $GOST_CHAINS
+	fi
 	if [ -n "${GOST_EXTRA_ARGS:-}" ]; then
 		# shellcheck disable=SC2086
 		set -- "$@" $GOST_EXTRA_ARGS
 	fi
 	/usr/local/bin/gost "$@" -O json > /etc/gost/config.json
 	chmod 0600 /etc/gost/config.json
+}
+
+gost_tcp_ports() {
+	if [ -f /etc/gost/config.json ]; then
+		ports="$(awk -F'"' '/"addr":/ {
+			addr=$4
+			sub(/^.*:/, "", addr)
+			if (addr ~ /^[0-9]+$/) print addr
+		}' /etc/gost/config.json | sort -u | tr '\n' ' ')"
+		if [ -n "$ports" ]; then
+			printf '%s' "$ports"
+			return 0
+		fi
+	fi
+	printf '%s' "${GOST_LISTEN_PORT}"
 }
 
 resolve_ipv4_dns() {
@@ -430,7 +494,10 @@ resolve_ipv4_dns() {
 
 refresh_hosts_cache() {
 	[ -w /etc/hosts ] || return 0
-	hosts_to_pin="${REALITY_DEST%:*}"
+	hosts_to_pin=""
+	if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+		hosts_to_pin="${REALITY_DEST%:*}"
+	fi
 
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		for item in $(printf '%s %s' "${GOST_FORWARD_TCP:-}" "${GOST_FORWARD_UDP:-}" | tr ',' ' '); do
@@ -439,11 +506,25 @@ refresh_hosts_cache() {
 			if [ -n "$thost" ]; then
 				case " $hosts_to_pin " in
 					*" $thost "*) ;;
-					*) hosts_to_pin="${hosts_to_pin} ${thost}" ;;
+					*) hosts_to_pin="${hosts_to_pin:+$hosts_to_pin }${thost}" ;;
 				esac
 			fi
 		done
+		if [ -f /etc/gost/config.json ]; then
+			for thost in $(awk -F'"' '/"addr":/ {
+				a=$4
+				sub(/:[0-9]+$/, "", a)
+				if (a ~ /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/) print a
+			}' /etc/gost/config.json); do
+				case " $hosts_to_pin " in
+					*" $thost "*) ;;
+					*) hosts_to_pin="${hosts_to_pin:+$hosts_to_pin }${thost}" ;;
+				esac
+			done
+		fi
 	fi
+
+	[ -n "$hosts_to_pin" ] || return 0
 
 	entries=""
 	for h in $hosts_to_pin; do
@@ -476,34 +557,32 @@ tune_os() {
 	detect_os
 	detect_resources
 
-	# Scale socket buffers to available memory (conserve RAM on 256-512M LXC containers)
-	if [ "$MEM_MB" -le 512 ]; then
-		rmem_max=8388608
-		wmem_max=8388608
-	else
-		rmem_max=33554432
-		wmem_max=33554432
-	fi
-
-	# Probe each sysctl before persisting so unprivileged LXC containers never log boot errors
+	# Probe and persist BBR + TCP socket tuning to /etc/sysctl.d/99-bbr.conf
 	mkdir -p /etc/sysctl.d
-	: > /etc/sysctl.d/99-surge.conf
+	rm -f /etc/sysctl.d/99-surge.conf 2>/dev/null || true
+	: > /etc/sysctl.d/99-bbr.conf
 	while IFS='=' read -r k v; do
 		[ -n "$k" ] || continue
 		if sysctl -w "${k}=${v}" >/dev/null 2>&1; then
-			printf '%s = %s\n' "$k" "$v" >> /etc/sysctl.d/99-surge.conf
+			printf '%s=%s\n' "$k" "$v" >> /etc/sysctl.d/99-bbr.conf
 		fi
-	done <<EOF
-net.core.default_qdisc=fq
+	done <<'EOF'
 net.ipv4.tcp_congestion_control=bbr
+net.core.default_qdisc=fq
 net.ipv4.tcp_fastopen=3
-net.core.rmem_max=${rmem_max}
-net.core.wmem_max=${wmem_max}
-net.ipv4.tcp_rmem=4096 65536 ${rmem_max}
-net.ipv4.tcp_wmem=4096 65536 ${wmem_max}
+net.core.rmem_max=67108864
+net.core.wmem_max=67108864
+net.ipv4.tcp_rmem=4096 87380 67108864
+net.ipv4.tcp_wmem=4096 65536 67108864
+net.ipv4.tcp_moderate_rcvbuf=1
+net.ipv4.tcp_notsent_lowat=16384
+net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_slow_start_after_idle=0
 net.ipv4.tcp_tw_reuse=1
 net.ipv4.tcp_fin_timeout=15
+net.ipv4.tcp_keepalive_time=60
+net.ipv4.tcp_keepalive_intvl=15
+net.ipv4.tcp_keepalive_probes=4
 net.core.somaxconn=4096
 EOF
 
@@ -527,10 +606,14 @@ EOF
 
 configure_firewall() {
 	if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-		ufw allow "${VLESS_LISTEN_PORT}/tcp" comment "surge vless (${NODE_NAME})" >/dev/null 2>&1 || true
+		if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+			ufw allow "${VLESS_LISTEN_PORT}/tcp" comment "surge vless (${NODE_NAME})" >/dev/null 2>&1 || true
+		fi
 		if [ "${GOST_ENABLE:-0}" = "1" ]; then
-			[ -n "${GOST_FORWARD_TCP:-}" ] && ufw allow "${GOST_LISTEN_PORT}/tcp" comment "surge gost tcp (${NODE_NAME})" >/dev/null 2>&1 || true
-			[ -n "${GOST_FORWARD_UDP:-}" ] && ufw allow "${GOST_LISTEN_PORT}/udp" comment "surge gost udp (${NODE_NAME})" >/dev/null 2>&1 || true
+			for p in $(gost_tcp_ports); do
+				ufw allow "${p}/tcp" comment "surge gost tcp (${NODE_NAME})" >/dev/null 2>&1 || true
+				[ -n "${GOST_FORWARD_UDP:-}" ] && ufw allow "${p}/udp" comment "surge gost udp (${NODE_NAME})" >/dev/null 2>&1 || true
+			done
 		fi
 		log "ensured ufw rules for surge (${NODE_NAME})"
 	fi

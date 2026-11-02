@@ -1,0 +1,37 @@
+{
+  "_comment": "Example custom gost v3 declarative template. Set GOST_CONFIG_TEMPLATE=services/gost/config.json.example (or your own file) in nodes/<node>.env or .env.",
+  "services": [
+    {
+      "name": "relay-tcp",
+      "addr": ":${GOST_LISTEN_PORT}",
+      "handler": {
+        "type": "tcp",
+        "metadata": {
+          "keepAlive": "true",
+          "ttl": "30s",
+          "nodelay": "true"
+        }
+      },
+      "listener": {
+        "type": "tcp",
+        "metadata": {
+          "keepAlive": "true",
+          "ttl": "30s",
+          "nodelay": "true"
+        }
+      },
+      "forwarder": {
+        "nodes": [
+          {
+            "name": "target-0",
+            "addr": "${GOST_FORWARD_TCP}"
+          }
+        ]
+      }
+    }
+  ],
+  "log": {
+    "output": "stderr",
+    "level": "${GOST_LOG_LEVEL}"
+  }
+}
