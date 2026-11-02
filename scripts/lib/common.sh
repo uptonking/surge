@@ -454,6 +454,9 @@ render_gost_config() {
 		# shellcheck disable=SC2086
 		set -- "$@" $GOST_EXTRA_ARGS
 	fi
+	if [ "$#" -le 2 ]; then
+		die "GOST_ENABLE=1 requires GOST_FORWARD_TCP, GOST_FORWARD_UDP, GOST_RULES, or GOST_CONFIG_TEMPLATE"
+	fi
 	/usr/local/bin/gost "$@" -O json > /etc/gost/config.json
 	chmod 0600 /etc/gost/config.json
 }
