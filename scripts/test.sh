@@ -23,8 +23,18 @@ if [ "${1:-}" = "--remote" ]; then
 		if curl -fsS --max-time 2 http://127.0.0.1:9090/version >/dev/null 2>&1; then
 			for pname in $display_name $relay_name; do
 				[ -n "$pname" ] || continue
-				delay="$(curl -fsS "http://127.0.0.1:9090/proxies/${pname}/delay?timeout=5000&url=http://www.gstatic.com/generate_204" 2>/dev/null || echo '{"error":"timeout"}')"
-				printf '  [PASS] ClashX Meta %-14s -> %s\n' "$pname" "$delay"
+				delay="$(curl -fsS "http://127.0.0.1:9090/proxies/${pname}/delay?timeout=5000&url=http://www.gstatic.com/generate_204" 2>/dev/null || true)"
+				case "$delay" in
+					*'"delay":'*) ;;
+					*)
+						sleep 1
+						delay="$(curl -fsS "http://127.0.0.1:9090/proxies/${pname}/delay?timeout=5000&url=http://www.gstatic.com/generate_204" 2>/dev/null || echo '{"error":"timeout"}')"
+						;;
+				esac
+				case "$delay" in
+					*'"delay":'*) printf '  [PASS] ClashX Meta %-14s -> %s\n' "$pname" "$delay" ;;
+					*)            printf '  [FAIL] ClashX Meta %-14s -> %s\n' "$pname" "$delay" >&2; exit 1 ;;
+				esac
 			done
 		fi
 	done
