@@ -1,0 +1,21 @@
+[Unit]
+Description=GO Simple Tunnel (gost Relay)
+Documentation=https://gost.run/
+After=network.target network-online.target nss-lookup.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+Environment="GOGC=${GOGC}"
+Environment="GOMAXPROCS=${GOMAXPROCS}"
+Environment="GOMEMLIMIT=${GOST_GOMEMLIMIT}"
+ExecStart=/usr/local/bin/gost ${GOST_ARGS}
+Restart=always
+RestartSec=2s
+LimitNOFILE=65535
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

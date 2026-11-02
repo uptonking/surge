@@ -1,0 +1,26 @@
+#!/sbin/openrc-run
+
+name="xray"
+description="Xray Service (VLESS + Reality + Vision)"
+supervisor="supervise-daemon"
+command="/usr/local/bin/xray"
+command_args="run -config /etc/xray/config.json"
+respawn_delay=2
+respawn_max=0
+rc_ulimit="-n 65535"
+output_log="/var/log/xray.log"
+error_log="/var/log/xray.log"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	export GOGC="${GOGC}"
+	export GOMAXPROCS="${GOMAXPROCS}"
+	export GOMEMLIMIT="${XRAY_GOMEMLIMIT}"
+	if [ -f /var/log/xray.log ] && [ "$(wc -c < /var/log/xray.log 2>/dev/null || echo 0)" -gt 1048576 ]; then
+		: > /var/log/xray.log
+	fi
+}

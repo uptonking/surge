@@ -1,0 +1,20 @@
+#!/bin/sh
+# Restart enabled surge services.
+
+set -eu
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck source=lib/common.sh
+. "${SCRIPT_DIR}/lib/common.sh"
+
+require_root
+detect_os
+detect_resources
+load_env "${1:-}"
+
+svc_enable_and_restart xray
+if [ "${GOST_ENABLE:-0}" = "1" ]; then
+	svc_enable_and_restart gost
+fi
+
+"${SCRIPT_DIR}/status.sh"

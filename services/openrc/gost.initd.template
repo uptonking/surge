@@ -1,0 +1,26 @@
+#!/sbin/openrc-run
+
+name="gost"
+description="GO Simple Tunnel (gost Relay)"
+supervisor="supervise-daemon"
+command="/usr/local/bin/gost"
+command_args="${GOST_ARGS}"
+respawn_delay=2
+respawn_max=0
+rc_ulimit="-n 65535"
+output_log="/var/log/gost.log"
+error_log="/var/log/gost.log"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	export GOGC="${GOGC}"
+	export GOMAXPROCS="${GOMAXPROCS}"
+	export GOMEMLIMIT="${GOST_GOMEMLIMIT}"
+	if [ -f /var/log/gost.log ] && [ "$(wc -c < /var/log/gost.log 2>/dev/null || echo 0)" -gt 1048576 ]; then
+		: > /var/log/gost.log
+	fi
+}
