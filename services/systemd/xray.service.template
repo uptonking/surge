@@ -11,6 +11,7 @@ User=root
 Environment="GOGC=${GOGC}"
 Environment="GOMAXPROCS=${GOMAXPROCS}"
 Environment="GOMEMLIMIT=${XRAY_GOMEMLIMIT}"
+ExecStartPre=-/sbin/sysctl -q -p /etc/sysctl.d/99-bbr.conf
 ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
 Restart=always
 RestartSec=2s

@@ -233,6 +233,7 @@ load_env() {
 	fi
 
 	export NODE_NAME DISPLAY_NAME NODE_HOST XRAY_ENABLE PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
+	export GOST_ENABLE GOST_LISTEN_PORT GOST_FORWARD_TCP GOST_FORWARD_UDP GOST_RULES GOST_CHAINS GOST_EXTRA_ARGS GOST_CONFIG_TEMPLATE
 	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID REALITY_SERVER_NAMES_JSON GOST_ARGS
 }
 
@@ -568,7 +569,9 @@ tune_os() {
 	: > /etc/sysctl.d/99-bbr.conf
 	while IFS='=' read -r k v; do
 		[ -n "$k" ] || continue
-		if sysctl -w "${k}=${v}" >/dev/null 2>&1; then
+		proc_path="/proc/sys/$(printf '%s' "$k" | tr '.' '/')"
+		[ -e "$proc_path" ] || continue
+		if sys_out="$(sysctl -w "${k}=${v}" 2>&1)" && ! printf '%s' "$sys_out" | grep -qiE 'error|cannot|denied|permitted|invalid|read-only|unknown'; then
 			printf '%s=%s\n' "$k" "$v" >> /etc/sysctl.d/99-bbr.conf
 		fi
 	done <<'EOF'
@@ -580,6 +583,12 @@ net.core.wmem_max=67108864
 net.ipv4.tcp_rmem=4096 87380 67108864
 net.ipv4.tcp_wmem=4096 65536 67108864
 net.ipv4.tcp_moderate_rcvbuf=1
+net.ipv4.tcp_window_scaling=1
+net.ipv4.tcp_adv_win_scale=1
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_dsack=1
+net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_ecn=0
 net.ipv4.tcp_notsent_lowat=16384
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_slow_start_after_idle=0
@@ -588,6 +597,8 @@ net.ipv4.tcp_fin_timeout=15
 net.ipv4.tcp_keepalive_time=60
 net.ipv4.tcp_keepalive_intvl=15
 net.ipv4.tcp_keepalive_probes=4
+net.ipv4.tcp_max_syn_backlog=8192
+net.ipv4.ip_local_port_range=10240 65535
 net.core.somaxconn=4096
 EOF
 
@@ -719,9 +730,9 @@ EOF
 Description=Run Surge Watchdog every 2 minutes
 
 [Timer]
-OnBootSec=1min
+OnBootSec=15s
 OnUnitActiveSec=2min
-AccuracySec=15s
+AccuracySec=5s
 
 [Install]
 WantedBy=timers.target
@@ -729,10 +740,10 @@ EOF
 		systemctl daemon-reload
 		systemctl enable --now surge-watchdog.timer >/dev/null 2>&1
 	elif [ -d /etc/crontabs ]; then
-		watchdog_cmd="*/2 * * * * ${SURGE_ROOT}/scripts/watchdog.sh >/dev/null 2>&1"
 		touch /etc/crontabs/root
 		grep -v "${SURGE_ROOT}/scripts/watchdog.sh" /etc/crontabs/root > /etc/crontabs/root.tmp || true
-		printf '%s\n' "$watchdog_cmd" >> /etc/crontabs/root.tmp
+		printf '@reboot %s/scripts/watchdog.sh >/dev/null 2>&1\n' "${SURGE_ROOT}" >> /etc/crontabs/root.tmp
+		printf '*/2 * * * * %s/scripts/watchdog.sh >/dev/null 2>&1\n' "${SURGE_ROOT}" >> /etc/crontabs/root.tmp
 		mv /etc/crontabs/root.tmp /etc/crontabs/root
 		chmod 0600 /etc/crontabs/root
 	fi

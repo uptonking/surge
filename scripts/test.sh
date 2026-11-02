@@ -98,6 +98,8 @@ case "$wstat" in
 esac
 
 [ -f /etc/sysctl.d/99-bbr.conf ] || fail "missing /etc/sysctl.d/99-bbr.conf"
+sys_err="$(sysctl -p /etc/sysctl.d/99-bbr.conf 2>&1 >/dev/null || true)"
+[ -z "$sys_err" ] || fail "sysctl -p /etc/sysctl.d/99-bbr.conf produced errors: ${sys_err}"
 cc="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
 tfo="$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo 0)"
 rmem="$(sysctl -n net.ipv4.tcp_rmem 2>/dev/null | tr '\t' ' ' || echo unknown)"

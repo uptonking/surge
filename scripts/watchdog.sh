@@ -12,6 +12,7 @@ detect_os
 detect_resources
 load_env
 
+[ -f /etc/sysctl.d/99-bbr.conf ] && sysctl -q -p /etc/sysctl.d/99-bbr.conf >/dev/null 2>&1 || true
 refresh_hosts_cache || true
 
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then

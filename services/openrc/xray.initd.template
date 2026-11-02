@@ -20,6 +20,7 @@ start_pre() {
 	export GOGC="${GOGC}"
 	export GOMAXPROCS="${GOMAXPROCS}"
 	export GOMEMLIMIT="${XRAY_GOMEMLIMIT}"
+	[ -f /etc/sysctl.d/99-bbr.conf ] && /sbin/sysctl -q -p /etc/sysctl.d/99-bbr.conf >/dev/null 2>&1 || true
 	if [ -f /var/log/xray.log ] && [ "$(wc -c < /var/log/xray.log 2>/dev/null || echo 0)" -gt 1048576 ]; then
 		: > /var/log/xray.log
 	fi
