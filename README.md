@@ -2,9 +2,9 @@
 
 Zero-Docker, resource-optimized proxy and relay automation stack designed for NAT/LXC and dedicated Linux VPS nodes running **Debian/Ubuntu (`systemd`)** or **Alpine Linux (`OpenRC`)**.
 
-- **Default Service**: **Xray (`VLESS + Reality + XTLS-Vision`)** over TCP (`v26.6.27` pinned for Mihomo / Clash.Meta compatibility). Extracted without `geoip.dat`/`geosite.dat` bloat (~15 MiB RAM, ~24 MiB disk).
+- **Default Service**: **Xray (`VLESS + Reality + XTLS-Vision`)** over TCP (`v26.6.27` pinned for Mihomo / Clash.Meta compatibility). Extracted without `geoip.dat`/`geosite.dat` bloat (~20 MiB RAM, ~24 MiB disk), with built-in in-memory `serveStale` IPv4 DNS caching and NAT-friendly TCP keepalives.
 - **Optional Relay Service**: **`gost` (`v3.3.0`)** raw TCP/UDP port forwarder (`GOST_ENABLE=1`), allowing a low-latency transit NAT VPS (`surge1-relay.aichorage.de`) to forward traffic to a clean-IP egress node (`verge2.aichorage.de`).
-- **Auto-Select OS & Resource Profile**: Automatically detects `systemd` (Debian/Ubuntu) vs `OpenRC` (Alpine), LXC memory limits, and configures Go runtime memory caps (`GOGC`, `GOMEMLIMIT`, `GOMAXPROCS`), kernel BBR/TCP Fast Open sysctls, boot services, and a 2-minute cron watchdog.
+- **Auto-Select OS & Resource Profile**: Automatically detects `systemd` (Debian/Ubuntu) vs `OpenRC` (Alpine), LXC cgroup memory limits, and configures Go runtime memory caps (`GOGC`, `GOMEMLIMIT`, `GOMAXPROCS`), container-safe kernel BBR/TCP Fast Open sysctls, `/etc/hosts` IPv4 pinning, boot services, and a 2-minute watchdog (`systemd` timer or OpenRC `crond`).
 
 ---
 
@@ -26,13 +26,21 @@ Mac Client (ClashX Meta: ~/.config/clash.meta/verge2609.yaml)
 
 ## Quickstart (Any VPS)
 
+### 1. Using a Committed Node Profile (`nodes/<node>.env`)
 ```sh
 git clone https://github.com/uptonking/surge.git /opt/surge
 cd /opt/surge
 ./scripts/bootstrap.sh <node_name>   # e.g. surge1, surge2, surge3, verge2
 ```
 
-`bootstrap.sh` records the selected node profile in `.node`, installs minimal OS packages, downloads the pinned `xray` binary (and `gost` when `GOST_ENABLE=1`), generates `.env` secrets (`VLESS_UUID`, `REALITY_PRIVATE_KEY`, `REALITY_PUBLIC_KEY`) idempotently, enables boot services, and prints the ready-to-use `vless://` URI and ClashX Meta YAML lines.
+### 2. Deploying to Any Ad-Hoc VPS (Without Creating a Profile First)
+```sh
+git clone https://github.com/uptonking/surge.git /opt/surge
+cd /opt/surge
+NODE_HOST=surge4.aichorage.de PUBLIC_VLESS_PORT=23141 VLESS_LISTEN_PORT=443 ./scripts/bootstrap.sh surge4
+```
+
+`bootstrap.sh` records the selected node in `.node`, installs minimal OS packages, downloads the pinned `xray` binary (and `gost` when `GOST_ENABLE=1`), generates `.env` secrets (`VLESS_UUID`, `REALITY_PRIVATE_KEY`, `REALITY_PUBLIC_KEY`) idempotently, enables boot services + watchdog, and prints the ready-to-use `vless://` URI and ClashX Meta YAML lines.
 
 ---
 
@@ -40,9 +48,11 @@ cd /opt/surge
 
 | Command | Description |
 | :--- | :--- |
-| `./scripts/bootstrap.sh [node]` | First-time setup on a VPS (selects `nodes/<node>.env`, generates `.env`, deploys services) |
-| `./scripts/deploy.sh [node]` | Pull latest git changes, re-render configs/units, and restart services |
-| `./scripts/status.sh` | Show service state, boot enablement, listening sockets, RSS memory, and client config |
+| `./scripts/bootstrap.sh [node]` | First-time setup on a VPS (selects `nodes/<node>.env` or ad-hoc env, generates `.env`, deploys services) |
+| `./scripts/deploy.sh [node]` | Pull latest git changes, re-render configs/units, refresh `/etc/hosts`, and restart services |
+| `./scripts/test.sh` | Run local node self-tests (syntax, config validation, active services, listening sockets, Reality target, BBR) |
+| `./scripts/test.sh --remote` | Run remote SSH self-tests across all nodes + live local ClashX Meta delay checks |
+| `./scripts/status.sh` | Show service state, boot enablement, watchdog state, listening sockets, RSS memory, and client config |
 | `./scripts/client.sh` | Print `vless://` URI and ClashX Meta YAML proxy lines |
 | `./scripts/restart.sh` | Restart enabled services (`xray` and optional `gost`) |
 | `./scripts/stop.sh` | Stop running services |
@@ -54,11 +64,11 @@ cd /opt/surge
 
 | Path | Committed? | Purpose |
 | :--- | :---: | :--- |
-| `config.env` | Yes | Shared defaults (`XRAY_VERSION`, `REALITY_*`, `GOST_*`) |
-| `nodes/<node>.env` | Yes | Per-node overrides (`NODE_HOST`, `PUBLIC_VLESS_PORT`, `VLESS_LISTEN_PORT`, `GOST_ENABLE`) |
+| `config.env` | Yes | Shared defaults (`XRAY_VERSION`, `REALITY_*`, `TCP_KEEPALIVE_*`, `GOST_*`) |
+| `nodes/<node>.env` | Yes | Per-node overrides (`NODE_HOST`, `PUBLIC_VLESS_PORT`, `VLESS_LISTEN_PORT`, `GOST_ENABLE`, `SSH_TARGET`) |
 | `.node` | No | Local file storing the active node profile name on that VPS |
-| `.env` | No | Node secrets (`VLESS_UUID`, `REALITY_PRIVATE_KEY`, `REALITY_PUBLIC_KEY`) |
-| `services/xray/config.json.template` | Yes | GeoIP-free Xray `VLESS + Reality + Vision` template |
+| `.env` | No | Node secrets (`VLESS_UUID`, `REALITY_PRIVATE_KEY`, `REALITY_PUBLIC_KEY`) and optional ad-hoc overrides |
+| `services/xray/config.json.template` | Yes | GeoIP-free Xray `VLESS + Reality + Vision` template with `serveStale` IPv4 DNS cache |
 | `services/systemd/*.template` | Yes | Debian/Ubuntu `systemd` unit templates |
 | `services/openrc/*.template` | Yes | Alpine `OpenRC` `supervise-daemon` init templates |
 

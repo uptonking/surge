@@ -1,6 +1,6 @@
 #!/bin/sh
 # Periodic watchdog executed every 2 minutes (via systemd timer or OpenRC crond)
-# to ensure xray/gost are running, logs stay bounded, and /etc/hosts IPv4 cache stays fresh.
+# to ensure xray/gost are running and listening, logs stay bounded, and /etc/hosts IPv4 cache stays fresh.
 
 set -eu
 
@@ -14,12 +14,14 @@ load_env
 
 refresh_hosts_cache || true
 
-if ! svc_is_active xray; then
+if ! svc_is_active xray || ! port_is_listening tcp "$VLESS_LISTEN_PORT"; then
 	svc_enable_and_restart xray >/dev/null 2>&1 || true
 fi
 
-if [ "${GOST_ENABLE:-0}" = "1" ] && ! svc_is_active gost; then
-	svc_enable_and_restart gost >/dev/null 2>&1 || true
+if [ "${GOST_ENABLE:-0}" = "1" ]; then
+	if ! svc_is_active gost || ! port_is_listening tcp "$GOST_LISTEN_PORT"; then
+		svc_enable_and_restart gost >/dev/null 2>&1 || true
+	fi
 fi
 
 if [ "$INIT_SYSTEM" = "openrc" ]; then

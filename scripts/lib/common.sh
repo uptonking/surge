@@ -109,14 +109,39 @@ detect_resources() {
 	export MEM_MB DISK_AVAIL_MB GOGC GOMAXPROCS XRAY_GOMEMLIMIT GOST_GOMEMLIMIT
 }
 
+csv_to_json_array() {
+	printf '%s' "$1" | awk -F',' '{
+		printf "["
+		n=0
+		for (i=1; i<=NF; i++) {
+			gsub(/^[ \t]+|[ \t]+$/, "", $i)
+			if ($i != "") {
+				if (n > 0) printf ","
+				printf "\"%s\"", $i
+				n++
+			}
+		}
+		printf "]"
+	}'
+}
+
 load_env() {
 	arg_node="${1:-}"
+
+	# Capture caller CLI environment overrides before sourcing config files
+	_cli_NODE_NAME="${NODE_NAME:-}"
+	_cli_DISPLAY_NAME="${DISPLAY_NAME:-}"
+	_cli_NODE_HOST="${NODE_HOST:-}"
+	_cli_PUBLIC_VLESS_PORT="${PUBLIC_VLESS_PORT:-}"
+	_cli_VLESS_LISTEN_PORT="${VLESS_LISTEN_PORT:-}"
+	_cli_GOST_ENABLE="${GOST_ENABLE:-}"
+	_cli_GOST_LISTEN_PORT="${GOST_LISTEN_PORT:-}"
+	_cli_GOST_FORWARD_TCP="${GOST_FORWARD_TCP:-}"
+	_cli_GOST_FORWARD_UDP="${GOST_FORWARD_UDP:-}"
+	_cli_GOST_EXTRA_ARGS="${GOST_EXTRA_ARGS:-}"
+
 	if [ -n "$arg_node" ]; then
-		if [ -f "${SURGE_ROOT}/nodes/${arg_node}.env" ]; then
-			printf '%s\n' "$arg_node" > "$NODE_FILE"
-		else
-			die "node profile nodes/${arg_node}.env not found"
-		fi
+		printf '%s\n' "$arg_node" > "$NODE_FILE"
 	fi
 
 	[ -f "$CONFIG_ENV" ] || die "missing ${CONFIG_ENV}"
@@ -125,9 +150,15 @@ load_env() {
 	. "$CONFIG_ENV"
 	if [ -f "$NODE_FILE" ]; then
 		selected_node="$(tr -d '[:space:]' < "$NODE_FILE")"
-		if [ -n "$selected_node" ] && [ -f "${SURGE_ROOT}/nodes/${selected_node}.env" ]; then
-			# shellcheck disable=SC1090
-			. "${SURGE_ROOT}/nodes/${selected_node}.env"
+		if [ -n "$selected_node" ]; then
+			if [ -f "${SURGE_ROOT}/nodes/${selected_node}.env" ]; then
+				# shellcheck disable=SC1090
+				. "${SURGE_ROOT}/nodes/${selected_node}.env"
+			else
+				# Ad-hoc node without a pre-committed nodes/<node>.env profile
+				NODE_NAME="$selected_node"
+				NODE_HOST="${selected_node}.${DOMAIN_NAME}"
+			fi
 		fi
 	fi
 	if [ -f "$SECRETS_ENV" ]; then
@@ -136,29 +167,55 @@ load_env() {
 	fi
 	set +a
 
-	# Format shortIds JSON array and first shortId
-	REALITY_SHORT_IDS_JSON="$(printf '%s' "${REALITY_SHORT_IDS}" | awk -F',' '{
-		printf "["
-		for (i=1; i<=NF; i++) {
-			gsub(/^[ \t]+|[ \t]+$/, "", $i)
-			if (i > 1) printf ","
-			printf "\"%s\"", $i
-		}
-		printf "]"
-	}')"
+	# Re-apply explicit CLI environment overrides
+	[ -n "$_cli_NODE_NAME" ] && NODE_NAME="$_cli_NODE_NAME"
+	[ -n "$_cli_DISPLAY_NAME" ] && DISPLAY_NAME="$_cli_DISPLAY_NAME"
+	[ -n "$_cli_NODE_HOST" ] && NODE_HOST="$_cli_NODE_HOST"
+	[ -n "$_cli_PUBLIC_VLESS_PORT" ] && PUBLIC_VLESS_PORT="$_cli_PUBLIC_VLESS_PORT"
+	[ -n "$_cli_VLESS_LISTEN_PORT" ] && VLESS_LISTEN_PORT="$_cli_VLESS_LISTEN_PORT"
+	[ -n "$_cli_GOST_ENABLE" ] && GOST_ENABLE="$_cli_GOST_ENABLE"
+	[ -n "$_cli_GOST_LISTEN_PORT" ] && GOST_LISTEN_PORT="$_cli_GOST_LISTEN_PORT"
+	[ -n "$_cli_GOST_FORWARD_TCP" ] && GOST_FORWARD_TCP="$_cli_GOST_FORWARD_TCP"
+	[ -n "$_cli_GOST_FORWARD_UDP" ] && GOST_FORWARD_UDP="$_cli_GOST_FORWARD_UDP"
+	[ -n "$_cli_GOST_EXTRA_ARGS" ] && GOST_EXTRA_ARGS="$_cli_GOST_EXTRA_ARGS"
+
+	if [ -z "${DISPLAY_NAME:-}" ]; then
+		DISPLAY_NAME="$(printf '%s' "$NODE_NAME" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+	fi
+
+	REALITY_SHORT_IDS_JSON="$(csv_to_json_array "${REALITY_SHORT_IDS}")"
 	FIRST_SHORT_ID="$(printf '%s' "${REALITY_SHORT_IDS}" | cut -d',' -f1 | tr -d '[:space:]')"
+
+	sni_list="${REALITY_SERVER_NAMES:-$REALITY_SNI}"
+	REALITY_SERVER_NAMES_JSON="$(csv_to_json_array "$sni_list")"
 
 	GOST_ARGS=""
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		if [ -n "${GOST_FORWARD_TCP:-}" ]; then
-			GOST_ARGS="-L tcp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_TCP}?keepAlive=true&nodelay=true"
+			for item in $(printf '%s' "$GOST_FORWARD_TCP" | tr ',' ' '); do
+				case "$item" in
+					*/*) lport="${item%%/*}"; target="${item#*/}" ;;
+					*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
+				esac
+				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
+			done
 		fi
 		if [ -n "${GOST_FORWARD_UDP:-}" ]; then
-			GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L udp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_UDP}?keepAlive=true&ttl=60s"
+			for item in $(printf '%s' "$GOST_FORWARD_UDP" | tr ',' ' '); do
+				case "$item" in
+					*/*) lport="${item%%/*}"; target="${item#*/}" ;;
+					*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
+				esac
+				GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L udp://:${lport}/${target}?keepAlive=true&ttl=60s"
+			done
+		fi
+		if [ -n "${GOST_EXTRA_ARGS:-}" ]; then
+			GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }${GOST_EXTRA_ARGS}"
 		fi
 	fi
 
-	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID GOST_ARGS
+	export NODE_NAME DISPLAY_NAME NODE_HOST PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
+	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID REALITY_SERVER_NAMES_JSON GOST_ARGS
 }
 
 install_base_packages() {
@@ -273,6 +330,16 @@ VLESS_UUID=${VLESS_UUID}
 REALITY_PRIVATE_KEY=${REALITY_PRIVATE_KEY}
 REALITY_PUBLIC_KEY=${REALITY_PUBLIC_KEY}
 EOF
+		# Persist ad-hoc node overrides if no nodes/<node>.env profile exists
+		if [ ! -f "${SURGE_ROOT}/nodes/${NODE_NAME}.env" ]; then
+			cat >> "$SECRETS_ENV" <<EOF
+NODE_NAME=${NODE_NAME}
+NODE_HOST=${NODE_HOST}
+PUBLIC_VLESS_PORT=${PUBLIC_VLESS_PORT}
+VLESS_LISTEN_PORT=${VLESS_LISTEN_PORT}
+GOST_ENABLE=${GOST_ENABLE}
+EOF
+		fi
 		chmod 600 "$SECRETS_ENV"
 		log "generated secrets in ${SECRETS_ENV}"
 	else
@@ -296,10 +363,15 @@ render_template() {
 		-e "s|\${VLESS_EMAIL}|$(escape_sed "${VLESS_EMAIL}")|g" \
 		-e "s|\${REALITY_DEST}|$(escape_sed "${REALITY_DEST}")|g" \
 		-e "s|\${REALITY_SNI}|$(escape_sed "${REALITY_SNI}")|g" \
+		-e "s|\${REALITY_SERVER_NAMES_JSON}|$(escape_sed "${REALITY_SERVER_NAMES_JSON}")|g" \
 		-e "s|\${REALITY_PRIVATE_KEY}|$(escape_sed "${REALITY_PRIVATE_KEY}")|g" \
 		-e "s|\${REALITY_PUBLIC_KEY}|$(escape_sed "${REALITY_PUBLIC_KEY}")|g" \
 		-e "s|\${REALITY_MIN_CLIENT_VER}|$(escape_sed "${REALITY_MIN_CLIENT_VER}")|g" \
+		-e "s|\${REALITY_MAX_TIME_DIFF}|$(escape_sed "${REALITY_MAX_TIME_DIFF}")|g" \
 		-e "s|\${REALITY_SHORT_IDS_JSON}|$(escape_sed "${REALITY_SHORT_IDS_JSON}")|g" \
+		-e "s|\${TCP_KEEPALIVE_IDLE}|$(escape_sed "${TCP_KEEPALIVE_IDLE}")|g" \
+		-e "s|\${TCP_KEEPALIVE_INTERVAL}|$(escape_sed "${TCP_KEEPALIVE_INTERVAL}")|g" \
+		-e "s|\${TCP_USER_TIMEOUT}|$(escape_sed "${TCP_USER_TIMEOUT}")|g" \
 		-e "s|\${GOGC}|$(escape_sed "${GOGC}")|g" \
 		-e "s|\${GOMAXPROCS}|$(escape_sed "${GOMAXPROCS}")|g" \
 		-e "s|\${XRAY_GOMEMLIMIT}|$(escape_sed "${XRAY_GOMEMLIMIT}")|g" \
@@ -312,10 +384,26 @@ render_gost_config() {
 	mkdir -p /etc/gost
 	set -- -C '{"log":{"level":"warn","output":"stderr"}}'
 	if [ -n "${GOST_FORWARD_TCP:-}" ]; then
-		set -- "$@" -L "tcp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_TCP}?keepAlive=true&nodelay=true"
+		for item in $(printf '%s' "$GOST_FORWARD_TCP" | tr ',' ' '); do
+			case "$item" in
+				*/*) lport="${item%%/*}"; target="${item#*/}" ;;
+				*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
+			esac
+			set -- "$@" -L "tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
+		done
 	fi
 	if [ -n "${GOST_FORWARD_UDP:-}" ]; then
-		set -- "$@" -L "udp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_UDP}?keepAlive=true&ttl=60s"
+		for item in $(printf '%s' "$GOST_FORWARD_UDP" | tr ',' ' '); do
+			case "$item" in
+				*/*) lport="${item%%/*}"; target="${item#*/}" ;;
+				*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
+			esac
+			set -- "$@" -L "udp://:${lport}/${target}?keepAlive=true&ttl=60s"
+		done
+	fi
+	if [ -n "${GOST_EXTRA_ARGS:-}" ]; then
+		# shellcheck disable=SC2086
+		set -- "$@" $GOST_EXTRA_ARGS
 	fi
 	/usr/local/bin/gost "$@" -O json > /etc/gost/config.json
 	chmod 0600 /etc/gost/config.json
@@ -323,6 +411,10 @@ render_gost_config() {
 
 resolve_ipv4_dns() {
 	host="$1"
+	case "$host" in
+		''|*[!0-9.]*) ;;
+		*) printf '%s' "$host"; return 0 ;;
+	esac
 	ip=""
 	if command -v resolvectl >/dev/null 2>&1; then
 		ip="$(resolvectl query -4 --legend=no "$host" 2>/dev/null | awk 'NR==1 {for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {print $i; exit}}' || true)"
@@ -338,26 +430,29 @@ resolve_ipv4_dns() {
 
 refresh_hosts_cache() {
 	[ -w /etc/hosts ] || return 0
-	reality_host="${REALITY_DEST%:*}"
-	entries=""
+	hosts_to_pin="${REALITY_DEST%:*}"
 
-	if [ -n "$reality_host" ]; then
-		rip="$(resolve_ipv4_dns "$reality_host")"
-		if [ -n "$rip" ]; then
-			entries="${rip} ${reality_host}"
-		fi
-	fi
-
-	if [ "${GOST_ENABLE:-0}" = "1" ] && [ -n "${GOST_FORWARD_TCP:-}" ]; then
-		gost_host="${GOST_FORWARD_TCP%:*}"
-		if [ -n "$gost_host" ] && [ "$gost_host" != "$reality_host" ]; then
-			gip="$(resolve_ipv4_dns "$gost_host")"
-			if [ -n "$gip" ]; then
-				entries="${entries:+${entries}
-}${gip} ${gost_host}"
+	if [ "${GOST_ENABLE:-0}" = "1" ]; then
+		for item in $(printf '%s %s' "${GOST_FORWARD_TCP:-}" "${GOST_FORWARD_UDP:-}" | tr ',' ' '); do
+			target="${item#*/}"
+			thost="${target%:*}"
+			if [ -n "$thost" ]; then
+				case " $hosts_to_pin " in
+					*" $thost "*) ;;
+					*) hosts_to_pin="${hosts_to_pin} ${thost}" ;;
+				esac
 			fi
-		fi
+		done
 	fi
+
+	entries=""
+	for h in $hosts_to_pin; do
+		hip="$(resolve_ipv4_dns "$h")"
+		if [ -n "$hip" ]; then
+			entries="${entries:+${entries}
+}${hip} ${h}"
+		fi
+	done
 
 	[ -n "$entries" ] || return 0
 
@@ -442,8 +537,8 @@ configure_firewall() {
 }
 
 cleanup_legacy_services() {
-	# Remove unused hysteria test artifacts if present on NAT nodes (frees ~24MB binary + RAM)
-	if [ "${NODE_NAME:-}" != "verge2" ]; then
+	# Remove unused hysteria test artifacts when CLEANUP_LEGACY_HYSTERIA=1 (frees ~24MB binary + RAM)
+	if [ "${CLEANUP_LEGACY_HYSTERIA:-0}" = "1" ]; then
 		if [ "$INIT_SYSTEM" = "openrc" ] && [ -f /etc/init.d/hysteria ]; then
 			log "stopping and removing legacy hysteria service on ${NODE_NAME}"
 			rc-service hysteria stop >/dev/null 2>&1 || true
@@ -455,6 +550,20 @@ cleanup_legacy_services() {
 			rm -f /etc/systemd/system/hysteria2.service /usr/local/bin/hysteria
 			systemctl daemon-reload >/dev/null 2>&1 || true
 		fi
+	fi
+}
+
+port_is_listening() {
+	proto="$1"
+	port="$2"
+	if command -v ss >/dev/null 2>&1; then
+		case "$proto" in
+			tcp) ss -tln | grep -Eq ":${port}[[:space:]]" ;;
+			udp) ss -uln | grep -Eq ":${port}[[:space:]]" ;;
+			*)   return 1 ;;
+		esac
+	else
+		netstat -tuln 2>/dev/null | grep -E "^${proto}" | grep -Eq ":${port}[[:space:]]"
 	fi
 }
 

@@ -36,17 +36,18 @@
           "show": false,
           "dest": "${REALITY_DEST}",
           "xver": 0,
-          "serverNames": [
-            "${REALITY_SNI}"
-          ],
+          "serverNames": ${REALITY_SERVER_NAMES_JSON},
           "privateKey": "${REALITY_PRIVATE_KEY}",
           "minClientVer": "${REALITY_MIN_CLIENT_VER}",
+          "maxTimeDiff": ${REALITY_MAX_TIME_DIFF},
           "shortIds": ${REALITY_SHORT_IDS_JSON}
         },
         "sockopt": {
           "tcpFastOpen": true,
           "tcpCongestion": "bbr",
-          "tcpNoDelay": true
+          "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
+          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
+          "tcpUserTimeout": ${TCP_USER_TIMEOUT}
         }
       },
       "sniffing": {
@@ -66,7 +67,9 @@
           "domainStrategy": "UseIPv4",
           "tcpFastOpen": true,
           "tcpCongestion": "bbr",
-          "tcpNoDelay": true
+          "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
+          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
+          "tcpUserTimeout": ${TCP_USER_TIMEOUT}
         }
       }
     },
