@@ -38,7 +38,6 @@ case "$action" in
 		;;
 	enable)
 		require_root
-		load_env
 		upsert_env_var GOST_ENABLE "1"
 		exec "${SCRIPT_DIR}/deploy.sh"
 		;;
@@ -47,7 +46,6 @@ case "$action" in
 		[ "$#" -ge 1 ] || die "usage: $0 forward <tcp_targets> [udp_targets]"
 		tcp_targets="$1"
 		udp_targets="${2:-}"
-		load_env
 		remove_env_var GOST_RULES
 		remove_env_var GOST_CHAINS
 		remove_env_var GOST_CONFIG_TEMPLATE
@@ -61,7 +59,6 @@ case "$action" in
 		[ "$#" -ge 1 ] || die "usage: $0 rules \"<gost_-L_rules>\" [\"<gost_-F_chains>\"]"
 		rules="$1"
 		chains="${2:-}"
-		load_env
 		remove_env_var GOST_CONFIG_TEMPLATE
 		upsert_env_var GOST_ENABLE "1"
 		upsert_env_var GOST_FORWARD_TCP ""
@@ -74,7 +71,6 @@ case "$action" in
 		require_root
 		[ "$#" -ge 1 ] || die "usage: $0 template <path/to/config.json.template>"
 		tpl="$1"
-		load_env
 		remove_env_var GOST_RULES
 		remove_env_var GOST_CHAINS
 		upsert_env_var GOST_ENABLE "1"
@@ -83,11 +79,9 @@ case "$action" in
 		;;
 	disable)
 		require_root
-		load_env
 		for k in GOST_ENABLE GOST_FORWARD_TCP GOST_FORWARD_UDP GOST_RULES GOST_CHAINS GOST_EXTRA_ARGS GOST_CONFIG_TEMPLATE; do
 			remove_env_var "$k"
 		done
-		upsert_env_var GOST_ENABLE "0"
 		exec "${SCRIPT_DIR}/deploy.sh"
 		;;
 	*)

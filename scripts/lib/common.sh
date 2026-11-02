@@ -128,21 +128,24 @@ csv_to_json_array() {
 load_env() {
 	arg_node="${1:-}"
 
-	# Capture caller CLI environment overrides before sourcing config files
-	_cli_NODE_NAME="${NODE_NAME:-}"
-	_cli_DISPLAY_NAME="${DISPLAY_NAME:-}"
-	_cli_NODE_HOST="${NODE_HOST:-}"
-	_cli_XRAY_ENABLE="${XRAY_ENABLE:-}"
-	_cli_PUBLIC_VLESS_PORT="${PUBLIC_VLESS_PORT:-}"
-	_cli_VLESS_LISTEN_PORT="${VLESS_LISTEN_PORT:-}"
-	_cli_GOST_ENABLE="${GOST_ENABLE:-}"
-	_cli_GOST_LISTEN_PORT="${GOST_LISTEN_PORT:-}"
-	_cli_GOST_FORWARD_TCP="${GOST_FORWARD_TCP:-}"
-	_cli_GOST_FORWARD_UDP="${GOST_FORWARD_UDP:-}"
-	_cli_GOST_RULES="${GOST_RULES:-}"
-	_cli_GOST_CHAINS="${GOST_CHAINS:-}"
-	_cli_GOST_EXTRA_ARGS="${GOST_EXTRA_ARGS:-}"
-	_cli_GOST_CONFIG_TEMPLATE="${GOST_CONFIG_TEMPLATE:-}"
+	# Capture caller CLI environment overrides only once per process
+	if [ -z "${_SURGE_CLI_CAPTURED:-}" ]; then
+		_cli_NODE_NAME="${NODE_NAME:-}"
+		_cli_DISPLAY_NAME="${DISPLAY_NAME:-}"
+		_cli_NODE_HOST="${NODE_HOST:-}"
+		_cli_XRAY_ENABLE="${XRAY_ENABLE:-}"
+		_cli_PUBLIC_VLESS_PORT="${PUBLIC_VLESS_PORT:-}"
+		_cli_VLESS_LISTEN_PORT="${VLESS_LISTEN_PORT:-}"
+		_cli_GOST_ENABLE="${GOST_ENABLE:-}"
+		_cli_GOST_LISTEN_PORT="${GOST_LISTEN_PORT:-}"
+		_cli_GOST_FORWARD_TCP="${GOST_FORWARD_TCP:-}"
+		_cli_GOST_FORWARD_UDP="${GOST_FORWARD_UDP:-}"
+		_cli_GOST_RULES="${GOST_RULES:-}"
+		_cli_GOST_CHAINS="${GOST_CHAINS:-}"
+		_cli_GOST_EXTRA_ARGS="${GOST_EXTRA_ARGS:-}"
+		_cli_GOST_CONFIG_TEMPLATE="${GOST_CONFIG_TEMPLATE:-}"
+		_SURGE_CLI_CAPTURED=1
+	fi
 
 	if [ -n "$arg_node" ]; then
 		printf '%s\n' "$arg_node" > "$NODE_FILE"
