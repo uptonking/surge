@@ -38,10 +38,19 @@ else
 fi
 
 printf '\n=== Process RSS Memory ===\n'
-ps -eo pid,rss,comm,args 2>/dev/null | awk '$3 ~ /^(xray|gost)$/ {printf "PID %-6s RSS %6.1f MiB  %s\n", $1, $2/1024, $3}' || true
+for p in /proc/[0-9]*; do
+	comm="$(cat "$p/comm" 2>/dev/null || true)"
+	case "$comm" in
+		xray|gost)
+			pid="${p#/proc/}"
+			rss_kb="$(awk '/^VmRSS:/ {print $2}' "$p/status" 2>/dev/null || echo 0)"
+			awk -v pid="$pid" -v rss="$rss_kb" -v comm="$comm" 'BEGIN {printf "PID %-6s RSS %6.1f MiB  %s\n", pid, rss/1024, comm}'
+			;;
+	esac
+done
 
 printf '\n=== System Disk & Memory ===\n'
-df -h / | awk 'NR<=2'
+df -Ph / | awk 'NR<=2'
 printf 'Effective Memory Limit: %s MiB (Xray GOMEMLIMIT=%s, GOGC=%s, GOMAXPROCS=%s)\n' \
 	"$MEM_MB" "$XRAY_GOMEMLIMIT" "$GOGC" "$GOMAXPROCS"
 
