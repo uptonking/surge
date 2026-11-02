@@ -462,8 +462,10 @@ gost_tcp_ports() {
 	if [ -f /etc/gost/config.json ]; then
 		ports="$(awk -F'"' '/"addr":/ {
 			addr=$4
-			sub(/^.*:/, "", addr)
-			if (addr ~ /^[0-9]+$/) print addr
+			if (addr ~ /^(:|0\.0\.0\.0:|127\.0\.0\.1:|\[::\]:)[0-9]+$/) {
+				sub(/^.*:/, "", addr)
+				print addr
+			}
 		}' /etc/gost/config.json | sort -u | tr '\n' ' ')"
 		if [ -n "$ports" ]; then
 			printf '%s' "$ports"
