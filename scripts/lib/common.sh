@@ -124,7 +124,7 @@ load_env() {
 	# shellcheck disable=SC1090
 	. "$CONFIG_ENV"
 	if [ -f "$NODE_FILE" ]; then
-		selected_node="$(cat "$NODE_FILE" | tr -d '[:space:]')"
+		selected_node="$(tr -d '[:space:]' < "$NODE_FILE")"
 		if [ -n "$selected_node" ] && [ -f "${SURGE_ROOT}/nodes/${selected_node}.env" ]; then
 			# shellcheck disable=SC1090
 			. "${SURGE_ROOT}/nodes/${selected_node}.env"
@@ -151,7 +151,7 @@ load_env() {
 	GOST_ARGS=""
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		if [ -n "${GOST_FORWARD_TCP:-}" ]; then
-			GOST_ARGS="-L tcp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_TCP}"
+			GOST_ARGS="-L tcp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_TCP}?keepAlive=true&nodelay=true"
 		fi
 		if [ -n "${GOST_FORWARD_UDP:-}" ]; then
 			GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L udp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_UDP}?keepAlive=true&ttl=60s"
@@ -282,26 +282,99 @@ EOF
 	export VLESS_UUID REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY
 }
 
+escape_sed() {
+	printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
+}
+
 render_template() {
 	src="$1"
 	dst="$2"
 	mkdir -p "$(dirname "$dst")"
 	sed \
-		-e "s|\${VLESS_LISTEN_PORT}|${VLESS_LISTEN_PORT}|g" \
-		-e "s|\${VLESS_UUID}|${VLESS_UUID}|g" \
-		-e "s|\${VLESS_EMAIL}|${VLESS_EMAIL}|g" \
-		-e "s|\${REALITY_DEST}|${REALITY_DEST}|g" \
-		-e "s|\${REALITY_SNI}|${REALITY_SNI}|g" \
-		-e "s|\${REALITY_PRIVATE_KEY}|${REALITY_PRIVATE_KEY}|g" \
-		-e "s|\${REALITY_PUBLIC_KEY}|${REALITY_PUBLIC_KEY}|g" \
-		-e "s|\${REALITY_MIN_CLIENT_VER}|${REALITY_MIN_CLIENT_VER}|g" \
-		-e "s|\${REALITY_SHORT_IDS_JSON}|${REALITY_SHORT_IDS_JSON}|g" \
-		-e "s|\${GOGC}|${GOGC}|g" \
-		-e "s|\${GOMAXPROCS}|${GOMAXPROCS}|g" \
-		-e "s|\${XRAY_GOMEMLIMIT}|${XRAY_GOMEMLIMIT}|g" \
-		-e "s|\${GOST_GOMEMLIMIT}|${GOST_GOMEMLIMIT}|g" \
-		-e "s|\${GOST_ARGS}|${GOST_ARGS}|g" \
+		-e "s|\${VLESS_LISTEN_PORT}|$(escape_sed "${VLESS_LISTEN_PORT}")|g" \
+		-e "s|\${VLESS_UUID}|$(escape_sed "${VLESS_UUID}")|g" \
+		-e "s|\${VLESS_EMAIL}|$(escape_sed "${VLESS_EMAIL}")|g" \
+		-e "s|\${REALITY_DEST}|$(escape_sed "${REALITY_DEST}")|g" \
+		-e "s|\${REALITY_SNI}|$(escape_sed "${REALITY_SNI}")|g" \
+		-e "s|\${REALITY_PRIVATE_KEY}|$(escape_sed "${REALITY_PRIVATE_KEY}")|g" \
+		-e "s|\${REALITY_PUBLIC_KEY}|$(escape_sed "${REALITY_PUBLIC_KEY}")|g" \
+		-e "s|\${REALITY_MIN_CLIENT_VER}|$(escape_sed "${REALITY_MIN_CLIENT_VER}")|g" \
+		-e "s|\${REALITY_SHORT_IDS_JSON}|$(escape_sed "${REALITY_SHORT_IDS_JSON}")|g" \
+		-e "s|\${GOGC}|$(escape_sed "${GOGC}")|g" \
+		-e "s|\${GOMAXPROCS}|$(escape_sed "${GOMAXPROCS}")|g" \
+		-e "s|\${XRAY_GOMEMLIMIT}|$(escape_sed "${XRAY_GOMEMLIMIT}")|g" \
+		-e "s|\${GOST_GOMEMLIMIT}|$(escape_sed "${GOST_GOMEMLIMIT}")|g" \
+		-e "s|\${GOST_ARGS}|$(escape_sed "${GOST_ARGS}")|g" \
 		"$src" > "$dst"
+}
+
+render_gost_config() {
+	mkdir -p /etc/gost
+	set -- -C '{"log":{"level":"warn","output":"stderr"}}'
+	if [ -n "${GOST_FORWARD_TCP:-}" ]; then
+		set -- "$@" -L "tcp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_TCP}?keepAlive=true&nodelay=true"
+	fi
+	if [ -n "${GOST_FORWARD_UDP:-}" ]; then
+		set -- "$@" -L "udp://:${GOST_LISTEN_PORT}/${GOST_FORWARD_UDP}?keepAlive=true&ttl=60s"
+	fi
+	/usr/local/bin/gost "$@" -O json > /etc/gost/config.json
+	chmod 0600 /etc/gost/config.json
+}
+
+resolve_ipv4_dns() {
+	host="$1"
+	ip=""
+	if command -v resolvectl >/dev/null 2>&1; then
+		ip="$(resolvectl query -4 --legend=no "$host" 2>/dev/null | awk 'NR==1 {for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {print $i; exit}}' || true)"
+	fi
+	if [ -z "$ip" ] && command -v nslookup >/dev/null 2>&1; then
+		ip="$(nslookup -type=a "$host" 2>/dev/null | awk '/^Address:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $2; exit}' || true)"
+	fi
+	if [ -z "$ip" ] && command -v getent >/dev/null 2>&1; then
+		ip="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1 {print $1}' || true)"
+	fi
+	printf '%s' "$ip"
+}
+
+refresh_hosts_cache() {
+	[ -w /etc/hosts ] || return 0
+	reality_host="${REALITY_DEST%:*}"
+	entries=""
+
+	if [ -n "$reality_host" ]; then
+		rip="$(resolve_ipv4_dns "$reality_host")"
+		if [ -n "$rip" ]; then
+			entries="${rip} ${reality_host}"
+		fi
+	fi
+
+	if [ "${GOST_ENABLE:-0}" = "1" ] && [ -n "${GOST_FORWARD_TCP:-}" ]; then
+		gost_host="${GOST_FORWARD_TCP%:*}"
+		if [ -n "$gost_host" ] && [ "$gost_host" != "$reality_host" ]; then
+			gip="$(resolve_ipv4_dns "$gost_host")"
+			if [ -n "$gip" ]; then
+				entries="${entries:+${entries}
+}${gip} ${gost_host}"
+			fi
+		fi
+	fi
+
+	[ -n "$entries" ] || return 0
+
+	want_block="# BEGIN SURGE HOSTS
+${entries}
+# END SURGE HOSTS"
+
+	cur_block="$(awk '/^# BEGIN SURGE HOSTS$/{flag=1} flag{print} /^# END SURGE HOSTS$/{flag=0}' /etc/hosts 2>/dev/null || true)"
+	if [ "$cur_block" = "$want_block" ]; then
+		return 0
+	fi
+
+	tmp_hosts="$(mktemp)"
+	awk '/^# BEGIN SURGE HOSTS$/{skip=1; next} /^# END SURGE HOSTS$/{skip=0; next} !skip{print}' /etc/hosts > "$tmp_hosts"
+	printf '%s\n' "$want_block" >> "$tmp_hosts"
+	cat "$tmp_hosts" > /etc/hosts
+	rm -f "$tmp_hosts"
 }
 
 tune_os() {
@@ -317,21 +390,27 @@ tune_os() {
 		wmem_max=33554432
 	fi
 
+	# Probe each sysctl before persisting so unprivileged LXC containers never log boot errors
 	mkdir -p /etc/sysctl.d
-	cat > /etc/sysctl.d/99-surge.conf <<EOF
-net.ipv4.tcp_congestion_control = bbr
-net.core.default_qdisc = fq
-net.ipv4.tcp_fastopen = 3
-net.core.rmem_max = ${rmem_max}
-net.core.wmem_max = ${wmem_max}
-net.ipv4.tcp_rmem = 4096 65536 ${rmem_max}
-net.ipv4.tcp_wmem = 4096 65536 ${wmem_max}
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 15
-net.core.somaxconn = 4096
+	: > /etc/sysctl.d/99-surge.conf
+	while IFS='=' read -r k v; do
+		[ -n "$k" ] || continue
+		if sysctl -w "${k}=${v}" >/dev/null 2>&1; then
+			printf '%s = %s\n' "$k" "$v" >> /etc/sysctl.d/99-surge.conf
+		fi
+	done <<EOF
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.tcp_fastopen=3
+net.core.rmem_max=${rmem_max}
+net.core.wmem_max=${wmem_max}
+net.ipv4.tcp_rmem=4096 65536 ${rmem_max}
+net.ipv4.tcp_wmem=4096 65536 ${wmem_max}
+net.ipv4.tcp_slow_start_after_idle=0
+net.ipv4.tcp_tw_reuse=1
+net.ipv4.tcp_fin_timeout=15
+net.core.somaxconn=4096
 EOF
-	sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-surge.conf >/dev/null 2>&1 || true
 
 	if [ "$INIT_SYSTEM" = "systemd" ]; then
 		# Cap journald disk usage to 16M on small Debian/Ubuntu containers
@@ -343,6 +422,7 @@ RuntimeMaxUse=8M
 MaxFileSec=3day
 EOF
 		systemctl restart systemd-journald >/dev/null 2>&1 || true
+		journalctl --vacuum-size=4M >/dev/null 2>&1 || true
 	elif [ "$INIT_SYSTEM" = "openrc" ]; then
 		rc-update add sysctl boot >/dev/null 2>&1 || true
 		rc-update add crond default >/dev/null 2>&1 || true
@@ -405,6 +485,9 @@ svc_enable_and_restart() {
 	else
 		chmod 0755 "/etc/init.d/${svc}"
 		rc-update add "$svc" default >/dev/null 2>&1 || true
+		if ! rc-service "$svc" status >/dev/null 2>&1; then
+			rc-service "$svc" zap >/dev/null 2>&1 || true
+		fi
 		rc-service "$svc" restart
 	fi
 }
@@ -423,15 +506,53 @@ svc_disable_and_stop() {
 }
 
 install_watchdog() {
-	watchdog_cmd="*/2 * * * * ${SURGE_ROOT}/scripts/watchdog.sh >/dev/null 2>&1"
-	if [ "$INIT_SYSTEM" = "systemd" ] && [ -d /etc/cron.d ]; then
-		printf 'SHELL=/bin/sh\nPATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\n*/2 * * * * root %s/scripts/watchdog.sh >/dev/null 2>&1\n' "$SURGE_ROOT" > /etc/cron.d/surge-watchdog
-		chmod 0644 /etc/cron.d/surge-watchdog
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		rm -f /etc/cron.d/surge-watchdog 2>/dev/null || true
+		cat > /etc/systemd/system/surge-watchdog.service <<EOF
+[Unit]
+Description=Surge Service and Hosts Cache Watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=${SURGE_ROOT}/scripts/watchdog.sh
+EOF
+		cat > /etc/systemd/system/surge-watchdog.timer <<'EOF'
+[Unit]
+Description=Run Surge Watchdog every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+EOF
+		systemctl daemon-reload
+		systemctl enable --now surge-watchdog.timer >/dev/null 2>&1
 	elif [ -d /etc/crontabs ]; then
+		watchdog_cmd="*/2 * * * * ${SURGE_ROOT}/scripts/watchdog.sh >/dev/null 2>&1"
 		touch /etc/crontabs/root
 		grep -v "${SURGE_ROOT}/scripts/watchdog.sh" /etc/crontabs/root > /etc/crontabs/root.tmp || true
 		printf '%s\n' "$watchdog_cmd" >> /etc/crontabs/root.tmp
 		mv /etc/crontabs/root.tmp /etc/crontabs/root
 		chmod 0600 /etc/crontabs/root
+	fi
+}
+
+watchdog_status() {
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		if systemctl is-active --quiet surge-watchdog.timer 2>/dev/null; then
+			printf 'active (systemd-timer: surge-watchdog.timer)'
+		else
+			printf 'inactive (systemd-timer)'
+		fi
+	else
+		if rc-service crond status >/dev/null 2>&1 && grep -q "${SURGE_ROOT}/scripts/watchdog.sh" /etc/crontabs/root 2>/dev/null; then
+			printf 'active (openrc-crond: */2 * * * *)'
+		else
+			printf 'inactive (openrc-crond)'
+		fi
 	fi
 }

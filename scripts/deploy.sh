@@ -28,6 +28,7 @@ cleanup_legacy_services
 install_xray
 ensure_secrets
 load_env "${1:-}"
+refresh_hosts_cache
 
 # Render & validate Xray config
 mkdir -p /etc/xray
@@ -47,6 +48,7 @@ log "xray enabled and started on TCP :${VLESS_LISTEN_PORT} (public ${NODE_HOST}:
 # Optional gost relay service
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	install_gost
+	render_gost_config
 	if [ "$INIT_SYSTEM" = "systemd" ]; then
 		render_template "${SURGE_ROOT}/services/systemd/gost.service.template" /etc/systemd/system/gost.service
 	else
@@ -56,6 +58,7 @@ if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	log "gost enabled and started (${GOST_ARGS})"
 else
 	svc_disable_and_stop gost
+	rm -rf /etc/gost 2>/dev/null || true
 fi
 
 install_watchdog

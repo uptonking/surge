@@ -17,7 +17,7 @@ xray_active="stopped"
 xray_enabled="disabled"
 svc_is_active xray && xray_active="running"
 svc_is_enabled xray && xray_enabled="enabled"
-printf 'xray : %-8s (boot: %s, listen: 0.0.0.0:%s -> public %s:%s)\n' \
+printf 'xray     : %-8s (boot: %s, listen: 0.0.0.0:%s -> public %s:%s)\n' \
 	"$xray_active" "$xray_enabled" "$VLESS_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_VLESS_PORT"
 
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
@@ -25,10 +25,12 @@ if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	gost_enabled="disabled"
 	svc_is_active gost && gost_active="running"
 	svc_is_enabled gost && gost_enabled="enabled"
-	printf 'gost : %-8s (boot: %s, args: %s)\n' "$gost_active" "$gost_enabled" "$GOST_ARGS"
+	printf 'gost     : %-8s (boot: %s, args: %s)\n' "$gost_active" "$gost_enabled" "$GOST_ARGS"
 else
-	printf 'gost : disabled (GOST_ENABLE=0)\n'
+	printf 'gost     : disabled (GOST_ENABLE=0)\n'
 fi
+
+printf 'watchdog : %s\n' "$(watchdog_status)"
 
 printf '\n=== Listening Sockets ===\n'
 if command -v ss >/dev/null 2>&1; then

@@ -4,6 +4,15 @@
     "dnsLog": false,
     "loglevel": "warning"
   },
+  "dns": {
+    "servers": [
+      "1.1.1.1",
+      "8.8.8.8",
+      "localhost"
+    ],
+    "queryStrategy": "UseIPv4",
+    "serveStale": true
+  },
   "inbounds": [
     {
       "tag": "in-vless-reality",
@@ -50,10 +59,11 @@
       "tag": "direct",
       "protocol": "freedom",
       "settings": {
-        "domainStrategy": "UseIPv4v6"
+        "domainStrategy": "UseIPv4"
       },
       "streamSettings": {
         "sockopt": {
+          "domainStrategy": "UseIPv4",
           "tcpFastOpen": true,
           "tcpCongestion": "bbr",
           "tcpNoDelay": true

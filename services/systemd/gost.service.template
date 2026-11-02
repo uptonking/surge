@@ -11,7 +11,7 @@ User=root
 Environment="GOGC=${GOGC}"
 Environment="GOMAXPROCS=${GOMAXPROCS}"
 Environment="GOMEMLIMIT=${GOST_GOMEMLIMIT}"
-ExecStart=/usr/local/bin/gost ${GOST_ARGS}
+ExecStart=/usr/local/bin/gost -C /etc/gost/config.json
 Restart=always
 RestartSec=2s
 LimitNOFILE=65535
