@@ -44,21 +44,22 @@ NODE_HOST=surge4.aichorage.de PUBLIC_VLESS_PORT=23141 VLESS_LISTEN_PORT=443 ./sc
 ```
 
 ### 3. Enabling `gost` Forwarding or Proxying on `surge2` / `surge3` / Any Node
-Edit `nodes/surge2.env` (or pass via CLI / `.env`):
+Use `./scripts/gost.sh` (persists settings in `/opt/surge/.env` across `git pull` and `reboot`), or pass environment variables to `./scripts/deploy.sh`:
 ```sh
-# Mode 1: Forward public port 23122 (internal :80) to any upstream TCP/UDP target
-GOST_ENABLE=1
-GOST_LISTEN_PORT=80
-GOST_FORWARD_TCP=verge2.aichorage.de:8443
+# Mode 1: Enable pre-wired forwarding (or specify any custom TCP/UDP target)
+./scripts/gost.sh enable
+./scripts/gost.sh forward verge2.aichorage.de:8443 verge2.aichorage.de:443
+./scripts/gost.sh forward 80/new-service.example.com:8080
 
-# Mode 2: Any gost protocol / proxy / chain
-# GOST_RULES="-L tcp://:80/upstream.example.com:443 -L socks5://:1080"
-# GOST_CHAINS="-F relay+tls://next-hop.example.com:8443"
+# Mode 2: Any vendor/framework-neutral gost v3 listener / proxy / chain
+./scripts/gost.sh rules "-L tcp://:80/upstream.example.com:443" "-F relay+tls://next-hop.example.com:8443"
 
-# Mode 3: Custom JSON/YAML config template
-# GOST_CONFIG_TEMPLATE=services/gost/config.json.example
+# Mode 3: Custom declarative JSON config template
+./scripts/gost.sh template services/gost/config.json.example
+
+# Disable gost on the node
+./scripts/gost.sh disable
 ```
-Then apply with `./scripts/deploy.sh`.
 
 ---
 
@@ -68,6 +69,7 @@ Then apply with `./scripts/deploy.sh`.
 | :--- | :--- |
 | `./scripts/bootstrap.sh [node]` | First-time setup on a VPS (selects `nodes/<node>.env` or ad-hoc env, generates `.env`, deploys services) |
 | `./scripts/deploy.sh [node]` | Pull latest git changes, re-render configs/units, apply `99-bbr.conf`, refresh `/etc/hosts`, and restart services |
+| `./scripts/gost.sh <cmd>` | Manage `gost` (`status`, `enable`, `forward`, `rules`, `template`, `disable`) and persist to `.env` |
 | `./scripts/test.sh` | Run local node self-tests (syntax, config validation, active services, listening sockets, Reality target, `99-bbr.conf`) |
 | `./scripts/test.sh --remote` | Run remote SSH self-tests across all nodes + live local ClashX Meta delay checks |
 | `./scripts/status.sh` | Show service state, boot enablement, watchdog state, listening sockets, RSS memory, and client config |

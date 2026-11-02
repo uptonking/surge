@@ -24,8 +24,11 @@ fi
 install_base_packages
 tune_os
 cleanup_legacy_services
-install_xray
-ensure_secrets
+if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	install_xray
+	ensure_secrets
+fi
+persist_cli_overrides
 load_env "${1:-}"
 
 # Xray VLESS + Reality + Vision service (enabled by default)

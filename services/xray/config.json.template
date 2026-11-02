@@ -11,7 +11,20 @@
       "localhost"
     ],
     "queryStrategy": "UseIPv4",
-    "serveStale": true
+    "enableParallelQuery": true,
+    "serveStale": true,
+    "serveExpiredTTL": 86400
+  },
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 8,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
+        "bufferSize": 64
+      }
+    }
   },
   "inbounds": [
     {

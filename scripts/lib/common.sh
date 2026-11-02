@@ -374,6 +374,41 @@ EOF
 	export VLESS_UUID REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY
 }
 
+upsert_env_var() {
+	key="$1"
+	val="$2"
+	touch "$SECRETS_ENV"
+	chmod 600 "$SECRETS_ENV"
+	grep -v "^${key}=" "$SECRETS_ENV" > "${SECRETS_ENV}.tmp" || true
+	escaped_val="$(printf '%s' "$val" | sed "s/'/'\\\\''/g")"
+	printf "%s='%s'\n" "$key" "$escaped_val" >> "${SECRETS_ENV}.tmp"
+	mv "${SECRETS_ENV}.tmp" "$SECRETS_ENV"
+	chmod 600 "$SECRETS_ENV"
+}
+
+remove_env_var() {
+	key="$1"
+	[ -f "$SECRETS_ENV" ] || return 0
+	grep -v "^${key}=" "$SECRETS_ENV" > "${SECRETS_ENV}.tmp" || true
+	mv "${SECRETS_ENV}.tmp" "$SECRETS_ENV"
+	chmod 600 "$SECRETS_ENV"
+}
+
+persist_cli_overrides() {
+	[ -n "${_cli_XRAY_ENABLE:-}" ] && upsert_env_var XRAY_ENABLE "$_cli_XRAY_ENABLE"
+	[ -n "${_cli_PUBLIC_VLESS_PORT:-}" ] && upsert_env_var PUBLIC_VLESS_PORT "$_cli_PUBLIC_VLESS_PORT"
+	[ -n "${_cli_VLESS_LISTEN_PORT:-}" ] && upsert_env_var VLESS_LISTEN_PORT "$_cli_VLESS_LISTEN_PORT"
+	[ -n "${_cli_GOST_ENABLE:-}" ] && upsert_env_var GOST_ENABLE "$_cli_GOST_ENABLE"
+	[ -n "${_cli_GOST_LISTEN_PORT:-}" ] && upsert_env_var GOST_LISTEN_PORT "$_cli_GOST_LISTEN_PORT"
+	[ -n "${_cli_GOST_FORWARD_TCP:-}" ] && upsert_env_var GOST_FORWARD_TCP "$_cli_GOST_FORWARD_TCP"
+	[ -n "${_cli_GOST_FORWARD_UDP:-}" ] && upsert_env_var GOST_FORWARD_UDP "$_cli_GOST_FORWARD_UDP"
+	[ -n "${_cli_GOST_RULES:-}" ] && upsert_env_var GOST_RULES "$_cli_GOST_RULES"
+	[ -n "${_cli_GOST_CHAINS:-}" ] && upsert_env_var GOST_CHAINS "$_cli_GOST_CHAINS"
+	[ -n "${_cli_GOST_EXTRA_ARGS:-}" ] && upsert_env_var GOST_EXTRA_ARGS "$_cli_GOST_EXTRA_ARGS"
+	[ -n "${_cli_GOST_CONFIG_TEMPLATE:-}" ] && upsert_env_var GOST_CONFIG_TEMPLATE "$_cli_GOST_CONFIG_TEMPLATE"
+	return 0
+}
+
 escape_sed() {
 	printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
 }
