@@ -1,0 +1,26 @@
+[Unit]
+Description=Hysteria2 QUIC Proxy Service
+Documentation=https://v2.hysteria.network/
+After=network.target network-online.target nss-lookup.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+Environment="GOGC=${GOGC}"
+Environment="GOMAXPROCS=${GOMAXPROCS}"
+Environment="GOMEMLIMIT=${HYSTERIA_GOMEMLIMIT}"
+Environment="HYSTERIA_LOG_LEVEL=warn"
+Environment="HYSTERIA_DISABLE_UPDATE_CHECK=true"
+Environment="QUIC_GO_DISABLE_GSO=true"
+Environment="QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING=true"
+ExecStartPre=-/sbin/sysctl -q -p /etc/sysctl.d/99-bbr.conf
+ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
+Restart=always
+RestartSec=2s
+LimitNOFILE=65535
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Tail logs for xray or gost across systemd and OpenRC.
-# Usage: ./scripts/logs.sh [xray|gost]
+# Tail logs for xray, hysteria, or gost across systemd and OpenRC.
+# Usage: ./scripts/logs.sh [xray|hysteria|gost]
 
 set -eu
 

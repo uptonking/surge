@@ -11,17 +11,20 @@ SURGE_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 if [ "${1:-}" = "--remote" ]; then
 	shift
-	nodes="${*:-surge1 surge2 surge3 verge2}"
+	nodes="${*:-surge1 surge2 surge3 verge2 stash1 stash2 verge4}"
 	for n in $nodes; do
 		profile="${SURGE_ROOT}/nodes/${n}.env"
 		[ -f "$profile" ] || { printf '[test] ERROR: missing %s\n' "$profile" >&2; exit 1; }
 		ssh_target="$(awk -F'=' '/^SSH_TARGET=/ {print $2}' "$profile" | tr -d '[:space:]')"
 		display_name="$(awk -F'=' '/^DISPLAY_NAME=/ {print $2}' "$profile" | tr -d '[:space:]')"
 		relay_name="$(awk -F'=' '/^PUBLIC_RELAY_NAME=/ {print $2}' "$profile" | tr -d '[:space:]')"
+		hy_enable="$(awk -F'=' '/^HYSTERIA_ENABLE=/ {print $2}' "$profile" | tr -d '[:space:]')"
+		hy_name=""
+		[ "${hy_enable:-0}" = "1" ] && hy_name="${display_name}-Hy2"
 		printf '=== Remote Verify: %s (%s) ===\n' "$n" "$ssh_target"
 		ssh "$ssh_target" '/opt/surge/scripts/test.sh'
 		if curl -fsS --max-time 2 http://127.0.0.1:9090/version >/dev/null 2>&1; then
-			for pname in $display_name $relay_name; do
+			for pname in $display_name $hy_name $relay_name; do
 				[ -n "$pname" ] || continue
 				delay="$(curl -fsS "http://127.0.0.1:9090/proxies/${pname}/delay?timeout=5000&url=http://www.gstatic.com/generate_204" 2>/dev/null || true)"
 				case "$delay" in
@@ -76,7 +79,17 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	pass "REALITY target https://${reality_host} reachable and cached in /etc/hosts"
 fi
 
-# 4. Optional gost relay checks
+# 4. Optional Hysteria2 QUIC service checks
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	[ -x /usr/local/bin/hysteria ] || fail "/usr/local/bin/hysteria not executable"
+	[ -s /etc/hysteria/config.yaml ] || fail "missing /etc/hysteria/config.yaml"
+	svc_is_active hysteria || fail "hysteria service is not active"
+	svc_is_enabled hysteria || fail "hysteria service is not enabled on boot"
+	port_is_listening udp "$HYSTERIA_LISTEN_PORT" || fail "hysteria is not listening on udp/${HYSTERIA_LISTEN_PORT}"
+	pass "hysteria config valid, service running & boot-enabled, listening on udp/${HYSTERIA_LISTEN_PORT} (tls=${HYSTERIA_TLS_MODE})"
+fi
+
+# 5. Optional gost relay checks
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	[ -x /usr/local/bin/gost ] || fail "/usr/local/bin/gost not executable"
 	[ -f /etc/gost/config.json ] || fail "missing /etc/gost/config.json"

@@ -21,6 +21,17 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	fi
 fi
 
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	if ! svc_is_active hysteria; then
+		svc_enable_and_restart hysteria >/dev/null 2>&1 || true
+	elif ! port_is_listening udp "$HYSTERIA_LISTEN_PORT"; then
+		# Only restart if ACME cert already exists or using self-signed mode (avoid interrupting initial ACME DNS-01 challenge)
+		if [ "${HYSTERIA_TLS_MODE}" = "self-signed" ] || ls /etc/hysteria/acme/*/*.crt >/dev/null 2>&1; then
+			svc_enable_and_restart hysteria >/dev/null 2>&1 || true
+		fi
+	fi
+fi
+
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	gost_ok=1
 	svc_is_active gost || gost_ok=0
@@ -33,7 +44,7 @@ if [ "${GOST_ENABLE:-0}" = "1" ]; then
 fi
 
 if [ "$INIT_SYSTEM" = "openrc" ]; then
-	for lf in /var/log/xray.log /var/log/gost.log; do
+	for lf in /var/log/xray.log /var/log/hysteria.log /var/log/gost.log; do
 		if [ -f "$lf" ] && [ "$(wc -c < "$lf" 2>/dev/null || echo 0)" -gt 1048576 ]; then
 			: > "$lf"
 		fi

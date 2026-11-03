@@ -1,0 +1,31 @@
+#!/sbin/openrc-run
+
+name="hysteria"
+description="Hysteria2 QUIC Proxy Service"
+supervisor="supervise-daemon"
+command="/usr/local/bin/hysteria"
+command_args="server -c /etc/hysteria/config.yaml"
+respawn_delay=2
+respawn_max=0
+rc_ulimit="-n 65535"
+output_log="/var/log/hysteria.log"
+error_log="/var/log/hysteria.log"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	export GOGC="${GOGC}"
+	export GOMAXPROCS="${GOMAXPROCS}"
+	export GOMEMLIMIT="${HYSTERIA_GOMEMLIMIT}"
+	export HYSTERIA_LOG_LEVEL="warn"
+	export HYSTERIA_DISABLE_UPDATE_CHECK="true"
+	export QUIC_GO_DISABLE_GSO="true"
+	export QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING="true"
+	[ -f /etc/sysctl.d/99-bbr.conf ] && /sbin/sysctl -q -p /etc/sysctl.d/99-bbr.conf >/dev/null 2>&1 || true
+	if [ -f /var/log/hysteria.log ] && [ "$(wc -c < /var/log/hysteria.log 2>/dev/null || echo 0)" -gt 1048576 ]; then
+		: > /var/log/hysteria.log
+	fi
+}

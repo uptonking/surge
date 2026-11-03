@@ -19,7 +19,10 @@ log "=== surge bootstrap: node=${NODE_NAME} os=${OS_PRETTY} init=${INIT_SYSTEM} 
 install_base_packages
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	install_xray
-	ensure_secrets
 fi
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	install_hysteria
+fi
+ensure_secrets
 
 exec "${SCRIPT_DIR}/deploy.sh" "${NODE_NAME}"

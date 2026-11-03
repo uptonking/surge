@@ -15,6 +15,9 @@ load_env "${1:-}"
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	svc_enable_and_restart xray
 fi
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	svc_enable_and_restart hysteria
+fi
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	svc_enable_and_restart gost
 fi

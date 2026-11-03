@@ -55,17 +55,19 @@ detect_os() {
 		x86_64|amd64)
 			XRAY_ARCH="64"
 			GOST_ARCH="amd64"
+			HYSTERIA_ARCH="amd64"
 			;;
 		aarch64|arm64)
 			XRAY_ARCH="arm64-v8a"
 			GOST_ARCH="arm64"
+			HYSTERIA_ARCH="arm64"
 			;;
 		*)
 			die "unsupported CPU architecture: ${ARCH_RAW}"
 			;;
 	esac
 
-	export OS_ID OS_PRETTY INIT_SYSTEM ARCH_RAW XRAY_ARCH GOST_ARCH
+	export OS_ID OS_PRETTY INIT_SYSTEM ARCH_RAW XRAY_ARCH GOST_ARCH HYSTERIA_ARCH
 }
 
 detect_resources() {
@@ -98,15 +100,26 @@ detect_resources() {
 		GOGC="50"
 		GOMAXPROCS="1"
 		XRAY_GOMEMLIMIT="48MiB"
+		HYSTERIA_GOMEMLIMIT="48MiB"
 		GOST_GOMEMLIMIT="24MiB"
+		HYSTERIA_INIT_STREAM_WIN="262144"
+		HYSTERIA_MAX_STREAM_WIN="4194304"
+		HYSTERIA_INIT_CONN_WIN="655360"
+		HYSTERIA_MAX_CONN_WIN="10485760"
 	else
 		GOGC="75"
 		GOMAXPROCS="2"
 		XRAY_GOMEMLIMIT="128MiB"
+		HYSTERIA_GOMEMLIMIT="96MiB"
 		GOST_GOMEMLIMIT="48MiB"
+		HYSTERIA_INIT_STREAM_WIN="524288"
+		HYSTERIA_MAX_STREAM_WIN="8388608"
+		HYSTERIA_INIT_CONN_WIN="1310720"
+		HYSTERIA_MAX_CONN_WIN="20971520"
 	fi
 
-	export MEM_MB DISK_AVAIL_MB GOGC GOMAXPROCS XRAY_GOMEMLIMIT GOST_GOMEMLIMIT
+	export MEM_MB DISK_AVAIL_MB GOGC GOMAXPROCS XRAY_GOMEMLIMIT HYSTERIA_GOMEMLIMIT GOST_GOMEMLIMIT
+	export HYSTERIA_INIT_STREAM_WIN HYSTERIA_MAX_STREAM_WIN HYSTERIA_INIT_CONN_WIN HYSTERIA_MAX_CONN_WIN
 }
 
 csv_to_json_array() {
@@ -136,6 +149,11 @@ load_env() {
 		_cli_XRAY_ENABLE="${XRAY_ENABLE:-}"
 		_cli_PUBLIC_VLESS_PORT="${PUBLIC_VLESS_PORT:-}"
 		_cli_VLESS_LISTEN_PORT="${VLESS_LISTEN_PORT:-}"
+		_cli_HYSTERIA_ENABLE="${HYSTERIA_ENABLE:-}"
+		_cli_PUBLIC_HYSTERIA_PORT="${PUBLIC_HYSTERIA_PORT:-}"
+		_cli_HYSTERIA_LISTEN_PORT="${HYSTERIA_LISTEN_PORT:-}"
+		_cli_HYSTERIA_SNI="${HYSTERIA_SNI:-}"
+		_cli_HYSTERIA_CF_DNS_TOKEN="${HYSTERIA_CF_DNS_TOKEN:-}"
 		_cli_GOST_ENABLE="${GOST_ENABLE:-}"
 		_cli_GOST_LISTEN_PORT="${GOST_LISTEN_PORT:-}"
 		_cli_GOST_FORWARD_TCP="${GOST_FORWARD_TCP:-}"
@@ -181,6 +199,11 @@ load_env() {
 	[ -n "$_cli_XRAY_ENABLE" ] && XRAY_ENABLE="$_cli_XRAY_ENABLE"
 	[ -n "$_cli_PUBLIC_VLESS_PORT" ] && PUBLIC_VLESS_PORT="$_cli_PUBLIC_VLESS_PORT"
 	[ -n "$_cli_VLESS_LISTEN_PORT" ] && VLESS_LISTEN_PORT="$_cli_VLESS_LISTEN_PORT"
+	[ -n "$_cli_HYSTERIA_ENABLE" ] && HYSTERIA_ENABLE="$_cli_HYSTERIA_ENABLE"
+	[ -n "$_cli_PUBLIC_HYSTERIA_PORT" ] && PUBLIC_HYSTERIA_PORT="$_cli_PUBLIC_HYSTERIA_PORT"
+	[ -n "$_cli_HYSTERIA_LISTEN_PORT" ] && HYSTERIA_LISTEN_PORT="$_cli_HYSTERIA_LISTEN_PORT"
+	[ -n "$_cli_HYSTERIA_SNI" ] && HYSTERIA_SNI="$_cli_HYSTERIA_SNI"
+	[ -n "$_cli_HYSTERIA_CF_DNS_TOKEN" ] && HYSTERIA_CF_DNS_TOKEN="$_cli_HYSTERIA_CF_DNS_TOKEN"
 	[ -n "$_cli_GOST_ENABLE" ] && GOST_ENABLE="$_cli_GOST_ENABLE"
 	[ -n "$_cli_GOST_LISTEN_PORT" ] && GOST_LISTEN_PORT="$_cli_GOST_LISTEN_PORT"
 	[ -n "$_cli_GOST_FORWARD_TCP" ] && GOST_FORWARD_TCP="$_cli_GOST_FORWARD_TCP"
@@ -192,6 +215,16 @@ load_env() {
 
 	if [ -z "${DISPLAY_NAME:-}" ]; then
 		DISPLAY_NAME="$(printf '%s' "$NODE_NAME" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+	fi
+	if [ -z "${HYSTERIA_SNI:-}" ]; then
+		HYSTERIA_SNI="${NODE_HOST}"
+	fi
+	if [ -n "${HYSTERIA_CF_DNS_TOKEN:-}" ]; then
+		HYSTERIA_TLS_MODE="acme-dns"
+		HYSTERIA_SKIP_CERT_VERIFY="false"
+	else
+		HYSTERIA_TLS_MODE="self-signed"
+		HYSTERIA_SKIP_CERT_VERIFY="true"
 	fi
 
 	REALITY_SHORT_IDS_JSON="$(csv_to_json_array "${REALITY_SHORT_IDS}")"
@@ -236,6 +269,7 @@ load_env() {
 	fi
 
 	export NODE_NAME DISPLAY_NAME NODE_HOST XRAY_ENABLE PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
+	export HYSTERIA_ENABLE HYSTERIA_VERSION PUBLIC_HYSTERIA_PORT HYSTERIA_LISTEN_PORT HYSTERIA_SNI HYSTERIA_ACME_EMAIL HYSTERIA_MASQUERADE_URL HYSTERIA_TLS_MODE HYSTERIA_SKIP_CERT_VERIFY
 	export GOST_ENABLE GOST_LISTEN_PORT GOST_FORWARD_TCP GOST_FORWARD_UDP GOST_RULES GOST_CHAINS GOST_EXTRA_ARGS GOST_CONFIG_TEMPLATE
 	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID REALITY_SERVER_NAMES_JSON GOST_ARGS
 }
@@ -327,54 +361,88 @@ install_gost() {
 	log "installed $(/usr/local/bin/gost -V 2>/dev/null | head -n 1)"
 }
 
+install_hysteria() {
+	if [ "${HYSTERIA_ENABLE:-0}" != "1" ]; then
+		return 0
+	fi
+	want_ver="v${HYSTERIA_VERSION#v}"
+	if [ -x /usr/local/bin/hysteria ]; then
+		cur_ver="$(/usr/local/bin/hysteria version 2>/dev/null | awk '/^Version:/ {print $2}' || true)"
+		if [ "$cur_ver" = "$want_ver" ]; then
+			log "hysteria ${want_ver} already installed"
+			return 0
+		fi
+	fi
+
+	log "downloading hysteria ${want_ver} (linux-${HYSTERIA_ARCH}) ..."
+	tmp_dir="$(mktemp -d)"
+	url="https://github.com/apernet/hysteria/releases/download/app%2F${want_ver}/hysteria-linux-${HYSTERIA_ARCH}"
+	curl -fsSL --retry 3 --connect-timeout 10 -o "${tmp_dir}/hysteria" "$url"
+	install -m 0755 "${tmp_dir}/hysteria" /usr/local/bin/hysteria
+	rm -rf "$tmp_dir"
+	log "installed hysteria $(/usr/local/bin/hysteria version 2>/dev/null | awk '/^Version:/ {print $2}')"
+}
+
 ensure_secrets() {
-	if [ "${XRAY_ENABLE:-1}" != "1" ]; then
+	if [ "${XRAY_ENABLE:-1}" != "1" ] && [ "${HYSTERIA_ENABLE:-0}" != "1" ]; then
 		return 0
 	fi
 	if [ -f "$SECRETS_ENV" ]; then
 		# shellcheck disable=SC1090
 		. "$SECRETS_ENV"
+	else
+		umask 077
+		printf '# surge node secrets — generated %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$SECRETS_ENV"
+		chmod 600 "$SECRETS_ENV"
 	fi
 
 	changed=0
-	if [ -z "${VLESS_UUID:-}" ]; then
-		VLESS_UUID="$(/usr/local/bin/xray uuid)"
-		changed=1
-	fi
-
-	if [ -z "${REALITY_PRIVATE_KEY:-}" ] || [ -z "${REALITY_PUBLIC_KEY:-}" ]; then
-		key_out="$(/usr/local/bin/xray x25519)"
-		REALITY_PRIVATE_KEY="$(printf '%s\n' "$key_out" | awk -F': ' '/Private[Kk]ey|Private key/ {print $2}' | tr -d '[:space:]')"
-		REALITY_PUBLIC_KEY="$(printf '%s\n' "$key_out" | awk -F': ' '/Public[Kk]ey|Public key|Password/ {print $2}' | tr -d '[:space:]')"
-		[ -n "$REALITY_PRIVATE_KEY" ] && [ -n "$REALITY_PUBLIC_KEY" ] || die "failed to parse xray x25519 output"
-		changed=1
-	fi
-
-	if [ "$changed" -eq 1 ] || [ ! -f "$SECRETS_ENV" ]; then
-		umask 077
-		cat > "$SECRETS_ENV" <<EOF
-# surge node secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
-VLESS_UUID=${VLESS_UUID}
-REALITY_PRIVATE_KEY=${REALITY_PRIVATE_KEY}
-REALITY_PUBLIC_KEY=${REALITY_PUBLIC_KEY}
-EOF
-		# Persist ad-hoc node overrides if no nodes/<node>.env profile exists
-		if [ ! -f "${SURGE_ROOT}/nodes/${NODE_NAME}.env" ]; then
-			cat >> "$SECRETS_ENV" <<EOF
-NODE_NAME=${NODE_NAME}
-NODE_HOST=${NODE_HOST}
-PUBLIC_VLESS_PORT=${PUBLIC_VLESS_PORT}
-VLESS_LISTEN_PORT=${VLESS_LISTEN_PORT}
-GOST_ENABLE=${GOST_ENABLE}
-EOF
+	if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+		if [ -z "${VLESS_UUID:-}" ]; then
+			VLESS_UUID="$(/usr/local/bin/xray uuid)"
+			upsert_env_var VLESS_UUID "$VLESS_UUID"
+			changed=1
 		fi
-		chmod 600 "$SECRETS_ENV"
-		log "generated secrets in ${SECRETS_ENV}"
+
+		if [ -z "${REALITY_PRIVATE_KEY:-}" ] || [ -z "${REALITY_PUBLIC_KEY:-}" ]; then
+			key_out="$(/usr/local/bin/xray x25519)"
+			REALITY_PRIVATE_KEY="$(printf '%s\n' "$key_out" | awk -F': ' '/Private[Kk]ey|Private key/ {print $2}' | tr -d '[:space:]')"
+			REALITY_PUBLIC_KEY="$(printf '%s\n' "$key_out" | awk -F': ' '/Public[Kk]ey|Public key|Password/ {print $2}' | tr -d '[:space:]')"
+			[ -n "$REALITY_PRIVATE_KEY" ] && [ -n "$REALITY_PUBLIC_KEY" ] || die "failed to parse xray x25519 output"
+			upsert_env_var REALITY_PRIVATE_KEY "$REALITY_PRIVATE_KEY"
+			upsert_env_var REALITY_PUBLIC_KEY "$REALITY_PUBLIC_KEY"
+			changed=1
+		fi
+	fi
+
+	if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+		if [ -z "${HYSTERIA_PASSWORD:-}" ]; then
+			HYSTERIA_PASSWORD="$(openssl rand -hex 16)"
+			upsert_env_var HYSTERIA_PASSWORD "$HYSTERIA_PASSWORD"
+			changed=1
+		fi
+	fi
+
+	# Persist ad-hoc node overrides if no nodes/<node>.env profile exists
+	if [ ! -f "${SURGE_ROOT}/nodes/${NODE_NAME}.env" ] && ! grep -q '^NODE_NAME=' "$SECRETS_ENV" 2>/dev/null; then
+		upsert_env_var NODE_NAME "$NODE_NAME"
+		upsert_env_var NODE_HOST "$NODE_HOST"
+		upsert_env_var PUBLIC_VLESS_PORT "$PUBLIC_VLESS_PORT"
+		upsert_env_var VLESS_LISTEN_PORT "$VLESS_LISTEN_PORT"
+		upsert_env_var HYSTERIA_ENABLE "$HYSTERIA_ENABLE"
+		upsert_env_var PUBLIC_HYSTERIA_PORT "$PUBLIC_HYSTERIA_PORT"
+		upsert_env_var HYSTERIA_LISTEN_PORT "$HYSTERIA_LISTEN_PORT"
+		upsert_env_var GOST_ENABLE "$GOST_ENABLE"
+		changed=1
+	fi
+
+	if [ "$changed" -eq 1 ]; then
+		log "updated secrets in ${SECRETS_ENV}"
 	else
 		log "keeping existing secrets in ${SECRETS_ENV}"
 	fi
 
-	export VLESS_UUID REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY
+	export VLESS_UUID REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY HYSTERIA_PASSWORD
 }
 
 upsert_env_var() {
@@ -401,6 +469,11 @@ persist_cli_overrides() {
 	[ -n "${_cli_XRAY_ENABLE:-}" ] && upsert_env_var XRAY_ENABLE "$_cli_XRAY_ENABLE"
 	[ -n "${_cli_PUBLIC_VLESS_PORT:-}" ] && upsert_env_var PUBLIC_VLESS_PORT "$_cli_PUBLIC_VLESS_PORT"
 	[ -n "${_cli_VLESS_LISTEN_PORT:-}" ] && upsert_env_var VLESS_LISTEN_PORT "$_cli_VLESS_LISTEN_PORT"
+	[ -n "${_cli_HYSTERIA_ENABLE:-}" ] && upsert_env_var HYSTERIA_ENABLE "$_cli_HYSTERIA_ENABLE"
+	[ -n "${_cli_PUBLIC_HYSTERIA_PORT:-}" ] && upsert_env_var PUBLIC_HYSTERIA_PORT "$_cli_PUBLIC_HYSTERIA_PORT"
+	[ -n "${_cli_HYSTERIA_LISTEN_PORT:-}" ] && upsert_env_var HYSTERIA_LISTEN_PORT "$_cli_HYSTERIA_LISTEN_PORT"
+	[ -n "${_cli_HYSTERIA_SNI:-}" ] && upsert_env_var HYSTERIA_SNI "$_cli_HYSTERIA_SNI"
+	[ -n "${_cli_HYSTERIA_CF_DNS_TOKEN:-}" ] && upsert_env_var HYSTERIA_CF_DNS_TOKEN "$_cli_HYSTERIA_CF_DNS_TOKEN"
 	[ -n "${_cli_GOST_ENABLE:-}" ] && upsert_env_var GOST_ENABLE "$_cli_GOST_ENABLE"
 	[ -n "${_cli_GOST_LISTEN_PORT:-}" ] && upsert_env_var GOST_LISTEN_PORT "$_cli_GOST_LISTEN_PORT"
 	[ -n "${_cli_GOST_FORWARD_TCP:-}" ] && upsert_env_var GOST_FORWARD_TCP "$_cli_GOST_FORWARD_TCP"
@@ -438,6 +511,7 @@ render_template() {
 		-e "s|\${GOGC}|$(escape_sed "${GOGC}")|g" \
 		-e "s|\${GOMAXPROCS}|$(escape_sed "${GOMAXPROCS}")|g" \
 		-e "s|\${XRAY_GOMEMLIMIT}|$(escape_sed "${XRAY_GOMEMLIMIT}")|g" \
+		-e "s|\${HYSTERIA_GOMEMLIMIT}|$(escape_sed "${HYSTERIA_GOMEMLIMIT}")|g" \
 		-e "s|\${GOST_GOMEMLIMIT}|$(escape_sed "${GOST_GOMEMLIMIT}")|g" \
 		-e "s|\${GOST_LISTEN_PORT}|$(escape_sed "${GOST_LISTEN_PORT}")|g" \
 		-e "s|\${GOST_FORWARD_TCP}|$(escape_sed "${GOST_FORWARD_TCP:-}")|g" \
@@ -445,6 +519,70 @@ render_template() {
 		-e "s|\${GOST_LOG_LEVEL}|$(escape_sed "${GOST_LOG_LEVEL:-warn}")|g" \
 		-e "s|\${GOST_ARGS}|$(escape_sed "${GOST_ARGS}")|g" \
 		"$src" > "$dst"
+}
+
+render_hysteria_config() {
+	mkdir -p /etc/hysteria
+	chmod 0700 /etc/hysteria
+	if [ -n "${HYSTERIA_CF_DNS_TOKEN:-}" ]; then
+		mkdir -p /etc/hysteria/acme
+		chmod 0700 /etc/hysteria/acme
+		cat > /etc/hysteria/config.yaml <<EOF
+listen: :${HYSTERIA_LISTEN_PORT}
+
+acme:
+  domains:
+    - ${HYSTERIA_SNI}
+  email: ${HYSTERIA_ACME_EMAIL}
+  type: dns
+  dns:
+    name: cloudflare
+    config:
+      cloudflare_api_token: ${HYSTERIA_CF_DNS_TOKEN}
+  dir: /etc/hysteria/acme
+EOF
+	else
+		if [ ! -s /etc/hysteria/cert.pem ] || [ ! -s /etc/hysteria/key.pem ]; then
+			log "generating self-signed ECDSA P-256 certificate for ${HYSTERIA_SNI}"
+			openssl req -x509 -nodes -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+				-days 3650 -subj "/CN=${HYSTERIA_SNI}" \
+				-addext "subjectAltName=DNS:${HYSTERIA_SNI}" \
+				-keyout /etc/hysteria/key.pem -out /etc/hysteria/cert.pem >/dev/null 2>&1
+			chmod 0600 /etc/hysteria/key.pem /etc/hysteria/cert.pem
+		fi
+		cat > /etc/hysteria/config.yaml <<EOF
+listen: :${HYSTERIA_LISTEN_PORT}
+
+tls:
+  cert: /etc/hysteria/cert.pem
+  key: /etc/hysteria/key.pem
+EOF
+	fi
+
+	cat >> /etc/hysteria/config.yaml <<EOF
+
+quic:
+  initStreamReceiveWindow: ${HYSTERIA_INIT_STREAM_WIN}
+  maxStreamReceiveWindow: ${HYSTERIA_MAX_STREAM_WIN}
+  initConnReceiveWindow: ${HYSTERIA_INIT_CONN_WIN}
+  maxConnReceiveWindow: ${HYSTERIA_MAX_CONN_WIN}
+  maxIdleTimeout: 30s
+  maxIncomingStreams: 256
+  disablePathMTUDiscovery: false
+
+auth:
+  type: password
+  password: "${HYSTERIA_PASSWORD}"
+
+ignoreClientBandwidth: false
+
+masquerade:
+  type: proxy
+  proxy:
+    url: ${HYSTERIA_MASQUERADE_URL}
+    rewriteHost: true
+EOF
+	chmod 0600 /etc/hysteria/config.yaml
 }
 
 render_gost_config() {
@@ -663,6 +801,9 @@ configure_firewall() {
 		if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 			ufw allow "${VLESS_LISTEN_PORT}/tcp" comment "surge vless (${NODE_NAME})" >/dev/null 2>&1 || true
 		fi
+		if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+			ufw allow "${HYSTERIA_LISTEN_PORT}/udp" comment "surge hysteria2 (${NODE_NAME})" >/dev/null 2>&1 || true
+		fi
 		if [ "${GOST_ENABLE:-0}" = "1" ]; then
 			for p in $(gost_tcp_ports); do
 				ufw allow "${p}/tcp" comment "surge gost tcp (${NODE_NAME})" >/dev/null 2>&1 || true
@@ -674,17 +815,23 @@ configure_firewall() {
 }
 
 cleanup_legacy_services() {
-	# Remove unused hysteria test artifacts when CLEANUP_LEGACY_HYSTERIA=1 (frees ~24MB binary + RAM)
-	if [ "${CLEANUP_LEGACY_HYSTERIA:-0}" = "1" ]; then
+	# Remove unused hysteria test artifacts when CLEANUP_LEGACY_HYSTERIA=1 and HYSTERIA_ENABLE=0 (frees ~24MB binary + RAM)
+	if [ "${CLEANUP_LEGACY_HYSTERIA:-0}" = "1" ] && [ "${HYSTERIA_ENABLE:-0}" != "1" ]; then
 		if [ "$INIT_SYSTEM" = "openrc" ] && [ -f /etc/init.d/hysteria ]; then
 			log "stopping and removing legacy hysteria service on ${NODE_NAME}"
 			rc-service hysteria stop >/dev/null 2>&1 || true
 			rc-update del hysteria default >/dev/null 2>&1 || true
 			rm -f /etc/init.d/hysteria /usr/local/bin/hysteria /var/log/hysteria.log
 			rm -rf /etc/hysteria
-		elif [ "$INIT_SYSTEM" = "systemd" ] && [ -f /etc/systemd/system/hysteria2.service ]; then
-			systemctl disable --now hysteria2 >/dev/null 2>&1 || true
-			rm -f /etc/systemd/system/hysteria2.service /usr/local/bin/hysteria
+		elif [ "$INIT_SYSTEM" = "systemd" ]; then
+			for unit in hysteria hysteria2; do
+				if [ -f "/etc/systemd/system/${unit}.service" ]; then
+					systemctl disable --now "$unit" >/dev/null 2>&1 || true
+					rm -f "/etc/systemd/system/${unit}.service"
+				fi
+			done
+			rm -f /usr/local/bin/hysteria
+			rm -rf /etc/hysteria
 			systemctl daemon-reload >/dev/null 2>&1 || true
 		fi
 	fi

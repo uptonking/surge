@@ -26,8 +26,11 @@ tune_os
 cleanup_legacy_services
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	install_xray
-	ensure_secrets
 fi
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	install_hysteria
+fi
+ensure_secrets
 persist_cli_overrides
 load_env "${1:-}"
 
@@ -47,6 +50,32 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	log "xray enabled and started on TCP :${VLESS_LISTEN_PORT} (public ${NODE_HOST}:${PUBLIC_VLESS_PORT})"
 else
 	svc_disable_and_stop xray
+fi
+
+# Optional Hysteria2 QUIC service (enabled on stash1 / stash2 or when HYSTERIA_ENABLE=1)
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	install_hysteria
+	render_hysteria_config
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		render_template "${SURGE_ROOT}/services/systemd/hysteria.service.template" /etc/systemd/system/hysteria.service
+	else
+		render_template "${SURGE_ROOT}/services/openrc/hysteria.initd.template" /etc/init.d/hysteria
+	fi
+	svc_enable_and_restart hysteria
+	if ! port_is_listening udp "$HYSTERIA_LISTEN_PORT"; then
+		log "waiting for hysteria UDP :${HYSTERIA_LISTEN_PORT} listener (TLS mode: ${HYSTERIA_TLS_MODE}) ..."
+		wait_i=0
+		while [ "$wait_i" -lt 45 ]; do
+			if port_is_listening udp "$HYSTERIA_LISTEN_PORT"; then
+				break
+			fi
+			sleep 2
+			wait_i=$((wait_i + 1))
+		done
+	fi
+	log "hysteria enabled and started on UDP :${HYSTERIA_LISTEN_PORT} (public ${NODE_HOST}:${PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
+else
+	svc_disable_and_stop hysteria
 fi
 
 # Optional gost proxy/forwarder/relay service

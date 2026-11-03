@@ -18,10 +18,21 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	xray_enabled="disabled"
 	svc_is_active xray && xray_active="running"
 	svc_is_enabled xray && xray_enabled="enabled"
-	printf 'xray     : %-8s (boot: %s, listen: 0.0.0.0:%s -> public %s:%s)\n' \
+	printf 'xray     : %-8s (boot: %s, listen: 0.0.0.0:%s/tcp -> public %s:%s)\n' \
 		"$xray_active" "$xray_enabled" "$VLESS_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_VLESS_PORT"
 else
 	printf 'xray     : disabled (XRAY_ENABLE=0)\n'
+fi
+
+if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	hy_active="stopped"
+	hy_enabled="disabled"
+	svc_is_active hysteria && hy_active="running"
+	svc_is_enabled hysteria && hy_enabled="enabled"
+	printf 'hysteria : %-8s (boot: %s, listen: 0.0.0.0:%s/udp -> public %s:%s, tls: %s)\n' \
+		"$hy_active" "$hy_enabled" "$HYSTERIA_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_TLS_MODE"
+else
+	printf 'hysteria : disabled (HYSTERIA_ENABLE=0)\n'
 fi
 
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
@@ -38,16 +49,16 @@ printf 'watchdog : %s\n' "$(watchdog_status)"
 
 printf '\n=== Listening Sockets ===\n'
 if command -v ss >/dev/null 2>&1; then
-	ss -tulnp | grep -E 'xray|gost' || true
+	ss -tulnp | grep -E 'xray|hysteria|gost' || true
 else
-	netstat -tulnp 2>/dev/null | grep -E 'xray|gost' || true
+	netstat -tulnp 2>/dev/null | grep -E 'xray|hysteria|gost' || true
 fi
 
 printf '\n=== Process RSS Memory ===\n'
 for p in /proc/[0-9]*; do
 	comm="$(cat "$p/comm" 2>/dev/null || true)"
 	case "$comm" in
-		xray|gost)
+		xray|hysteria|gost)
 			pid="${p#/proc/}"
 			rss_kb="$(awk '/^VmRSS:/ {print $2}' "$p/status" 2>/dev/null || echo 0)"
 			awk -v pid="$pid" -v rss="$rss_kb" -v comm="$comm" 'BEGIN {printf "PID %-6s RSS %6.1f MiB  %s\n", pid, rss/1024, comm}'
@@ -57,10 +68,11 @@ done
 
 printf '\n=== System Disk & Memory ===\n'
 df -Ph / | awk 'NR<=2'
-printf 'Effective Memory Limit: %s MiB (Xray GOMEMLIMIT=%s, GOGC=%s, GOMAXPROCS=%s)\n' \
-	"$MEM_MB" "$XRAY_GOMEMLIMIT" "$GOGC" "$GOMAXPROCS"
+printf 'Effective Memory Limit: %s MiB (Xray GOMEMLIMIT=%s, Hysteria2 GOMEMLIMIT=%s, GOGC=%s, GOMAXPROCS=%s)\n' \
+	"$MEM_MB" "$XRAY_GOMEMLIMIT" "$HYSTERIA_GOMEMLIMIT" "$GOGC" "$GOMAXPROCS"
 
-if [ "${XRAY_ENABLE:-1}" = "1" ] && [ -n "${VLESS_UUID:-}" ] && [ -n "${REALITY_PUBLIC_KEY:-}" ]; then
+if { [ "${XRAY_ENABLE:-1}" = "1" ] && [ -n "${VLESS_UUID:-}" ] && [ -n "${REALITY_PUBLIC_KEY:-}" ]; } || \
+   { [ "${HYSTERIA_ENABLE:-0}" = "1" ] && [ -n "${HYSTERIA_PASSWORD:-}" ]; }; then
 	printf '\n'
 	"${SCRIPT_DIR}/client.sh"
 fi
