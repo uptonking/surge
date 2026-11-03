@@ -78,7 +78,8 @@ Use `./scripts/gost.sh` (persists settings in `/opt/surge/.env` across `git pull
 | `./scripts/bootstrap.sh [node]` | First-time setup on a VPS (selects `nodes/<node>.env` or ad-hoc env, generates `.env`, deploys services) |
 | `./scripts/deploy.sh [node]` | Pull latest git changes, re-render configs/units, apply `99-bbr.conf`, refresh `/etc/hosts`, and restart services |
 | `./scripts/gost.sh <cmd>` | Manage `gost` (`status`, `enable`, `forward`, `rules`, `template`, `disable`) and persist to `.env` |
-| `./scripts/test.sh` | Run local node self-tests (syntax, config validation, active services, listening sockets, Reality target, `99-bbr.conf`) |
+| `./scripts/test.sh` | Run local node self-tests (syntax, unresolved-placeholder check on rendered units, config validation, hop-rule drift/idempotency, active services, listening sockets, Reality target, `99-bbr.conf`) |
+| `./scripts/hop.sh` | Idempotently (re)install Hysteria2 hop `REDIRECT` rules; run automatically by the hysteria service start hook (`ExecStartPre` / `start_pre`), never fails the service |
 | `./scripts/test.sh --remote` | Run remote SSH self-tests across all nodes + live local ClashX Meta delay checks |
 | `./scripts/status.sh` | Show service state, boot enablement, watchdog state, listening sockets, RSS memory, and client config |
 | `./scripts/client.sh` | Print `vless://` URI and ClashX Meta YAML proxy lines |
@@ -91,3 +92,9 @@ Use `./scripts/gost.sh` (persists settings in `/opt/surge/.env` across `git pull
 ## License
 
 MIT — see [LICENSE.md](LICENSE.md).
+
+## Integrity & Robustness Notes
+
+- Downloaded `xray`, `hysteria`, and `gost` binaries are SHA-256 verified against the upstream release checksum files (mismatch is fatal; set `SURGE_REQUIRE_CHECKSUM=1` to also fail when a checksum file is unavailable).
+- `HYSTERIA_HOP_PORTS` is validated (`N` or `N-M`, `1..65535`); hop rules are reconciled by exact match, so unchanged rules are never flushed and a hop failure never blocks the primary Hysteria2 port.
+- `deploy.sh` re-executes itself after `git pull` when the repository changed, so freshly pulled scripts/templates are always the ones used to render units.
