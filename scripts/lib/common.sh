@@ -96,30 +96,43 @@ detect_resources() {
 
 	DISK_AVAIL_MB="$(df -Pm / | awk 'NR==2 {print $4}' 2>/dev/null || echo 500)"
 
-	if [ "$MEM_MB" -le 512 ]; then
+	if [ "$MEM_MB" -le 320 ]; then
 		GOGC="50"
 		GOMAXPROCS="1"
 		XRAY_GOMEMLIMIT="48MiB"
 		HYSTERIA_GOMEMLIMIT="48MiB"
 		GOST_GOMEMLIMIT="24MiB"
-		HYSTERIA_INIT_STREAM_WIN="262144"
+		HYSTERIA_INIT_STREAM_WIN="524288"
 		HYSTERIA_MAX_STREAM_WIN="4194304"
-		HYSTERIA_INIT_CONN_WIN="655360"
+		HYSTERIA_INIT_CONN_WIN="1310720"
 		HYSTERIA_MAX_CONN_WIN="10485760"
+		HYSTERIA_MAX_STREAMS="256"
+	elif [ "$MEM_MB" -le 512 ]; then
+		GOGC="50"
+		GOMAXPROCS="1"
+		XRAY_GOMEMLIMIT="64MiB"
+		HYSTERIA_GOMEMLIMIT="64MiB"
+		GOST_GOMEMLIMIT="32MiB"
+		HYSTERIA_INIT_STREAM_WIN="1048576"
+		HYSTERIA_MAX_STREAM_WIN="8388608"
+		HYSTERIA_INIT_CONN_WIN="2621440"
+		HYSTERIA_MAX_CONN_WIN="20971520"
+		HYSTERIA_MAX_STREAMS="1024"
 	else
 		GOGC="75"
 		GOMAXPROCS="2"
 		XRAY_GOMEMLIMIT="128MiB"
 		HYSTERIA_GOMEMLIMIT="96MiB"
 		GOST_GOMEMLIMIT="48MiB"
-		HYSTERIA_INIT_STREAM_WIN="524288"
+		HYSTERIA_INIT_STREAM_WIN="1048576"
 		HYSTERIA_MAX_STREAM_WIN="8388608"
-		HYSTERIA_INIT_CONN_WIN="1310720"
+		HYSTERIA_INIT_CONN_WIN="2621440"
 		HYSTERIA_MAX_CONN_WIN="20971520"
+		HYSTERIA_MAX_STREAMS="1024"
 	fi
 
 	export MEM_MB DISK_AVAIL_MB GOGC GOMAXPROCS XRAY_GOMEMLIMIT HYSTERIA_GOMEMLIMIT GOST_GOMEMLIMIT
-	export HYSTERIA_INIT_STREAM_WIN HYSTERIA_MAX_STREAM_WIN HYSTERIA_INIT_CONN_WIN HYSTERIA_MAX_CONN_WIN
+	export HYSTERIA_INIT_STREAM_WIN HYSTERIA_MAX_STREAM_WIN HYSTERIA_INIT_CONN_WIN HYSTERIA_MAX_CONN_WIN HYSTERIA_MAX_STREAMS
 }
 
 csv_to_json_array() {
@@ -152,6 +165,8 @@ load_env() {
 		_cli_HYSTERIA_ENABLE="${HYSTERIA_ENABLE:-}"
 		_cli_PUBLIC_HYSTERIA_PORT="${PUBLIC_HYSTERIA_PORT:-}"
 		_cli_HYSTERIA_LISTEN_PORT="${HYSTERIA_LISTEN_PORT:-}"
+		_cli_HYSTERIA_HOP_PORTS="${HYSTERIA_HOP_PORTS:-}"
+		_cli_HYSTERIA_HOP_INTERVAL="${HYSTERIA_HOP_INTERVAL:-}"
 		_cli_HYSTERIA_SNI="${HYSTERIA_SNI:-}"
 		_cli_HYSTERIA_CF_DNS_TOKEN="${HYSTERIA_CF_DNS_TOKEN:-}"
 		_cli_GOST_ENABLE="${GOST_ENABLE:-}"
@@ -202,6 +217,8 @@ load_env() {
 	[ -n "$_cli_HYSTERIA_ENABLE" ] && HYSTERIA_ENABLE="$_cli_HYSTERIA_ENABLE"
 	[ -n "$_cli_PUBLIC_HYSTERIA_PORT" ] && PUBLIC_HYSTERIA_PORT="$_cli_PUBLIC_HYSTERIA_PORT"
 	[ -n "$_cli_HYSTERIA_LISTEN_PORT" ] && HYSTERIA_LISTEN_PORT="$_cli_HYSTERIA_LISTEN_PORT"
+	[ -n "$_cli_HYSTERIA_HOP_PORTS" ] && HYSTERIA_HOP_PORTS="$_cli_HYSTERIA_HOP_PORTS"
+	[ -n "$_cli_HYSTERIA_HOP_INTERVAL" ] && HYSTERIA_HOP_INTERVAL="$_cli_HYSTERIA_HOP_INTERVAL"
 	[ -n "$_cli_HYSTERIA_SNI" ] && HYSTERIA_SNI="$_cli_HYSTERIA_SNI"
 	[ -n "$_cli_HYSTERIA_CF_DNS_TOKEN" ] && HYSTERIA_CF_DNS_TOKEN="$_cli_HYSTERIA_CF_DNS_TOKEN"
 	[ -n "$_cli_GOST_ENABLE" ] && GOST_ENABLE="$_cli_GOST_ENABLE"
@@ -225,6 +242,11 @@ load_env() {
 	else
 		HYSTERIA_TLS_MODE="self-signed"
 		HYSTERIA_SKIP_CERT_VERIFY="true"
+	fi
+	if [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
+		HYSTERIA_CLIENT_PORTS="${PUBLIC_HYSTERIA_PORT},${HYSTERIA_HOP_PORTS}"
+	else
+		HYSTERIA_CLIENT_PORTS=""
 	fi
 
 	REALITY_SHORT_IDS_JSON="$(csv_to_json_array "${REALITY_SHORT_IDS}")"
@@ -269,17 +291,21 @@ load_env() {
 	fi
 
 	export NODE_NAME DISPLAY_NAME NODE_HOST XRAY_ENABLE PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
-	export HYSTERIA_ENABLE HYSTERIA_VERSION PUBLIC_HYSTERIA_PORT HYSTERIA_LISTEN_PORT HYSTERIA_SNI HYSTERIA_ACME_EMAIL HYSTERIA_MASQUERADE_URL HYSTERIA_TLS_MODE HYSTERIA_SKIP_CERT_VERIFY
+	export HYSTERIA_ENABLE HYSTERIA_VERSION PUBLIC_HYSTERIA_PORT HYSTERIA_LISTEN_PORT HYSTERIA_HOP_PORTS HYSTERIA_HOP_INTERVAL HYSTERIA_CLIENT_PORTS HYSTERIA_SNI HYSTERIA_ACME_EMAIL HYSTERIA_MASQUERADE_URL HYSTERIA_TLS_MODE HYSTERIA_SKIP_CERT_VERIFY
 	export GOST_ENABLE GOST_LISTEN_PORT GOST_FORWARD_TCP GOST_FORWARD_UDP GOST_RULES GOST_CHAINS GOST_EXTRA_ARGS GOST_CONFIG_TEMPLATE
 	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID REALITY_SERVER_NAMES_JSON GOST_ARGS
 }
 
 install_base_packages() {
 	detect_os
+	need_iptables=""
+	if [ "${HYSTERIA_ENABLE:-0}" = "1" ] && [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
+		need_iptables="iptables:iptables"
+	fi
 	case "$OS_ID" in
 		debian|ubuntu)
 			missing=""
-			for pkg_cmd in "curl:curl" "unzip:unzip" "openssl:openssl" "ca-certificates:update-ca-certificates"; do
+			for pkg_cmd in "curl:curl" "unzip:unzip" "openssl:openssl" "ca-certificates:update-ca-certificates" $need_iptables; do
 				pkg="${pkg_cmd%%:*}"
 				cmd="${pkg_cmd#*:}"
 				command -v "$cmd" >/dev/null 2>&1 || missing="${missing} ${pkg}"
@@ -296,7 +322,7 @@ install_base_packages() {
 			;;
 		alpine)
 			missing=""
-			for pkg_cmd in "curl:curl" "unzip:unzip" "openssl:openssl" "ca-certificates:update-ca-certificates" "iproute2-ss:ss"; do
+			for pkg_cmd in "curl:curl" "unzip:unzip" "openssl:openssl" "ca-certificates:update-ca-certificates" "iproute2-ss:ss" $need_iptables; do
 				pkg="${pkg_cmd%%:*}"
 				cmd="${pkg_cmd#*:}"
 				command -v "$cmd" >/dev/null 2>&1 || missing="${missing} ${pkg}"
@@ -472,6 +498,8 @@ persist_cli_overrides() {
 	[ -n "${_cli_HYSTERIA_ENABLE:-}" ] && upsert_env_var HYSTERIA_ENABLE "$_cli_HYSTERIA_ENABLE"
 	[ -n "${_cli_PUBLIC_HYSTERIA_PORT:-}" ] && upsert_env_var PUBLIC_HYSTERIA_PORT "$_cli_PUBLIC_HYSTERIA_PORT"
 	[ -n "${_cli_HYSTERIA_LISTEN_PORT:-}" ] && upsert_env_var HYSTERIA_LISTEN_PORT "$_cli_HYSTERIA_LISTEN_PORT"
+	[ -n "${_cli_HYSTERIA_HOP_PORTS:-}" ] && upsert_env_var HYSTERIA_HOP_PORTS "$_cli_HYSTERIA_HOP_PORTS"
+	[ -n "${_cli_HYSTERIA_HOP_INTERVAL:-}" ] && upsert_env_var HYSTERIA_HOP_INTERVAL "$_cli_HYSTERIA_HOP_INTERVAL"
 	[ -n "${_cli_HYSTERIA_SNI:-}" ] && upsert_env_var HYSTERIA_SNI "$_cli_HYSTERIA_SNI"
 	[ -n "${_cli_HYSTERIA_CF_DNS_TOKEN:-}" ] && upsert_env_var HYSTERIA_CF_DNS_TOKEN "$_cli_HYSTERIA_CF_DNS_TOKEN"
 	[ -n "${_cli_GOST_ENABLE:-}" ] && upsert_env_var GOST_ENABLE "$_cli_GOST_ENABLE"
@@ -494,6 +522,7 @@ render_template() {
 	dst="$2"
 	mkdir -p "$(dirname "$dst")"
 	sed \
+		-e "s|\${SURGE_ROOT}|$(escape_sed "${SURGE_ROOT}")|g" \
 		-e "s|\${VLESS_LISTEN_PORT}|$(escape_sed "${VLESS_LISTEN_PORT}")|g" \
 		-e "s|\${VLESS_UUID}|$(escape_sed "${VLESS_UUID:-}")|g" \
 		-e "s|\${VLESS_EMAIL}|$(escape_sed "${VLESS_EMAIL}")|g" \
@@ -567,7 +596,7 @@ quic:
   initConnReceiveWindow: ${HYSTERIA_INIT_CONN_WIN}
   maxConnReceiveWindow: ${HYSTERIA_MAX_CONN_WIN}
   maxIdleTimeout: 30s
-  maxIncomingStreams: 256
+  maxIncomingStreams: ${HYSTERIA_MAX_STREAMS}
   disablePathMTUDiscovery: false
 
 auth:
@@ -583,6 +612,49 @@ masquerade:
     rewriteHost: true
 EOF
 	chmod 0600 /etc/hysteria/config.yaml
+}
+
+clear_hysteria_port_hop() {
+	for ipt in iptables ip6tables; do
+		command -v "$ipt" >/dev/null 2>&1 || continue
+		"$ipt" -t nat -S PREROUTING 2>/dev/null | grep -- 'surge-hy2-hop' | while IFS= read -r rule; do
+			del_rule="$(printf '%s' "$rule" | sed 's/^-A /-D /')"
+			# shellcheck disable=SC2086
+			"$ipt" -t nat $del_rule >/dev/null 2>&1 || true
+		done
+	done
+}
+
+reconcile_hysteria_port_hop() {
+	clear_hysteria_port_hop
+	if [ "${HYSTERIA_ENABLE:-0}" != "1" ] || [ -z "${HYSTERIA_HOP_PORTS:-}" ]; then
+		return 0
+	fi
+	command -v iptables >/dev/null 2>&1 || die "iptables is required when HYSTERIA_HOP_PORTS is set"
+	for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
+		[ -n "$item" ] || continue
+		dport_spec="$(printf '%s' "$item" | tr '-' ':')"
+		iptables -t nat -A PREROUTING -p udp -m udp --dport "$dport_spec" \
+			-m comment --comment surge-hy2-hop -j REDIRECT --to-ports "${HYSTERIA_LISTEN_PORT}"
+		if command -v ip6tables >/dev/null 2>&1; then
+			ip6tables -t nat -A PREROUTING -p udp -m udp --dport "$dport_spec" \
+				-m comment --comment surge-hy2-hop -j REDIRECT --to-ports "${HYSTERIA_LISTEN_PORT}" >/dev/null 2>&1 || true
+		fi
+	done
+}
+
+hysteria_port_hop_active() {
+	if [ "${HYSTERIA_ENABLE:-0}" != "1" ] || [ -z "${HYSTERIA_HOP_PORTS:-}" ]; then
+		return 0
+	fi
+	command -v iptables >/dev/null 2>&1 || return 1
+	nat_rules="$(iptables -t nat -S PREROUTING 2>/dev/null || true)"
+	for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
+		[ -n "$item" ] || continue
+		dport_spec="$(printf '%s' "$item" | tr '-' ':')"
+		printf '%s\n' "$nat_rules" | grep -F -- "--dport ${dport_spec}" | grep -q -- "surge-hy2-hop" || return 1
+	done
+	return 0
 }
 
 render_gost_config() {
@@ -775,6 +847,9 @@ net.ipv4.tcp_keepalive_intvl=15
 net.ipv4.tcp_keepalive_probes=4
 net.ipv4.tcp_max_syn_backlog=8192
 net.ipv4.ip_local_port_range=10240 65535
+net.ipv4.udp_rmem_min=16384
+net.ipv4.udp_wmem_min=16384
+net.core.netdev_max_backlog=10000
 net.core.somaxconn=4096
 EOF
 
@@ -803,6 +878,12 @@ configure_firewall() {
 		fi
 		if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 			ufw allow "${HYSTERIA_LISTEN_PORT}/udp" comment "surge hysteria2 (${NODE_NAME})" >/dev/null 2>&1 || true
+			if [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
+				for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
+					ufw_spec="$(printf '%s' "$item" | tr '-' ':')"
+					ufw allow "${ufw_spec}/udp" comment "surge hysteria2 hop (${NODE_NAME})" >/dev/null 2>&1 || true
+				done
+			fi
 		fi
 		if [ "${GOST_ENABLE:-0}" = "1" ]; then
 			for p in $(gost_tcp_ports); do

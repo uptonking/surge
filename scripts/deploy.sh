@@ -56,6 +56,7 @@ fi
 if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	install_hysteria
 	render_hysteria_config
+	reconcile_hysteria_port_hop
 	if [ "$INIT_SYSTEM" = "systemd" ]; then
 		render_template "${SURGE_ROOT}/services/systemd/hysteria.service.template" /etc/systemd/system/hysteria.service
 	else
@@ -73,8 +74,9 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 			wait_i=$((wait_i + 1))
 		done
 	fi
-	log "hysteria enabled and started on UDP :${HYSTERIA_LISTEN_PORT} (public ${NODE_HOST}:${PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
+	log "hysteria enabled and started on UDP :${HYSTERIA_LISTEN_PORT} (public ${NODE_HOST}:${HYSTERIA_CLIENT_PORTS:-$PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
 else
+	clear_hysteria_port_hop
 	svc_disable_and_stop hysteria
 fi
 

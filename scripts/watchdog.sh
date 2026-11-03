@@ -22,6 +22,9 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 fi
 
 if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	if ! hysteria_port_hop_active; then
+		reconcile_hysteria_port_hop >/dev/null 2>&1 || true
+	fi
 	if ! svc_is_active hysteria; then
 		svc_enable_and_restart hysteria >/dev/null 2>&1 || true
 	elif ! port_is_listening udp "$HYSTERIA_LISTEN_PORT"; then

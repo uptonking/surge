@@ -113,7 +113,8 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	svc_is_active hysteria || fail "hysteria service is not active"
 	svc_is_enabled hysteria || fail "hysteria service is not enabled on boot"
 	port_is_listening udp "$HYSTERIA_LISTEN_PORT" || fail "hysteria is not listening on udp/${HYSTERIA_LISTEN_PORT}"
-	pass "hysteria config valid, service running & boot-enabled, listening on udp/${HYSTERIA_LISTEN_PORT} (tls=${HYSTERIA_TLS_MODE})"
+	hysteria_port_hop_active || fail "hysteria port hopping rules (${HYSTERIA_HOP_PORTS} -> :${HYSTERIA_LISTEN_PORT}/udp) missing in iptables"
+	pass "hysteria config valid, service running & boot-enabled, listening on udp/${HYSTERIA_LISTEN_PORT} (ports=${HYSTERIA_CLIENT_PORTS:-$PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
 fi
 
 # 5. Optional gost relay checks

@@ -16,6 +16,7 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	svc_enable_and_restart xray
 fi
 if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+	reconcile_hysteria_port_hop
 	svc_enable_and_restart hysteria
 fi
 if [ "${GOST_ENABLE:-0}" = "1" ]; then

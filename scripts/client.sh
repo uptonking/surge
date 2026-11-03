@@ -42,11 +42,19 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	hy_name="${DISPLAY_NAME}-Hy2"
 	hy_insecure="0"
 	[ "${HYSTERIA_SKIP_CERT_VERIFY}" = "true" ] && hy_insecure="1"
-	hy_uri="hysteria2://${HYSTERIA_PASSWORD}@${NODE_HOST}:${PUBLIC_HYSTERIA_PORT}?sni=${HYSTERIA_SNI}&insecure=${hy_insecure}#${hy_name}"
-	printf '\nhysteria2 URI (%s, tls=%s):\n  %s\n\n' "$hy_name" "$HYSTERIA_TLS_MODE" "$hy_uri"
-	printf 'ClashX Meta Hysteria2 proxy entry:\n'
-	printf "  - { name: '%s', type: hysteria2, server: %s, port: %s, password: '%s', sni: '%s', skip-cert-verify: %s, udp: true, alpn: [h3] }\n" \
-		"$hy_name" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_PASSWORD" "$HYSTERIA_SNI" "$HYSTERIA_SKIP_CERT_VERIFY"
+	if [ -n "${HYSTERIA_CLIENT_PORTS:-}" ]; then
+		hy_uri="hysteria2://${HYSTERIA_PASSWORD}@${NODE_HOST}:${PUBLIC_HYSTERIA_PORT}?sni=${HYSTERIA_SNI}&insecure=${hy_insecure}&mport=${HYSTERIA_CLIENT_PORTS}#${hy_name}"
+		printf '\nhysteria2 URI (%s, tls=%s, ports=%s):\n  %s\n\n' "$hy_name" "$HYSTERIA_TLS_MODE" "$HYSTERIA_CLIENT_PORTS" "$hy_uri"
+		printf 'ClashX Meta Hysteria2 proxy entry:\n'
+		printf "  - { name: '%s', type: hysteria2, server: %s, port: %s, ports: '%s', hop-interval: %s, password: '%s', sni: '%s', skip-cert-verify: %s, udp: true, alpn: [h3] }\n" \
+			"$hy_name" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_CLIENT_PORTS" "${HYSTERIA_HOP_INTERVAL:-30}" "$HYSTERIA_PASSWORD" "$HYSTERIA_SNI" "$HYSTERIA_SKIP_CERT_VERIFY"
+	else
+		hy_uri="hysteria2://${HYSTERIA_PASSWORD}@${NODE_HOST}:${PUBLIC_HYSTERIA_PORT}?sni=${HYSTERIA_SNI}&insecure=${hy_insecure}#${hy_name}"
+		printf '\nhysteria2 URI (%s, tls=%s):\n  %s\n\n' "$hy_name" "$HYSTERIA_TLS_MODE" "$hy_uri"
+		printf 'ClashX Meta Hysteria2 proxy entry:\n'
+		printf "  - { name: '%s', type: hysteria2, server: %s, port: %s, password: '%s', sni: '%s', skip-cert-verify: %s, udp: true, alpn: [h3] }\n" \
+			"$hy_name" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_PASSWORD" "$HYSTERIA_SNI" "$HYSTERIA_SKIP_CERT_VERIFY"
+	fi
 fi
 
 if [ "${XRAY_ENABLE:-1}" = "0" ] && [ "${HYSTERIA_ENABLE:-0}" = "0" ] && [ "${GOST_ENABLE:-0}" = "1" ]; then

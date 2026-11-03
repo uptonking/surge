@@ -29,8 +29,16 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	hy_enabled="disabled"
 	svc_is_active hysteria && hy_active="running"
 	svc_is_enabled hysteria && hy_enabled="enabled"
-	printf 'hysteria : %-8s (boot: %s, listen: 0.0.0.0:%s/udp -> public %s:%s, tls: %s)\n' \
-		"$hy_active" "$hy_enabled" "$HYSTERIA_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_TLS_MODE"
+	hy_hop_info=""
+	if [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
+		if hysteria_port_hop_active; then
+			hy_hop_info=", hop: ${HYSTERIA_CLIENT_PORTS} -> :${HYSTERIA_LISTEN_PORT}/udp"
+		else
+			hy_hop_info=", hop: INACTIVE (${HYSTERIA_HOP_PORTS})"
+		fi
+	fi
+	printf 'hysteria : %-8s (boot: %s, listen: 0.0.0.0:%s/udp -> public %s:%s%s, tls: %s)\n' \
+		"$hy_active" "$hy_enabled" "$HYSTERIA_LISTEN_PORT" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$hy_hop_info" "$HYSTERIA_TLS_MODE"
 else
 	printf 'hysteria : disabled (HYSTERIA_ENABLE=0)\n'
 fi
