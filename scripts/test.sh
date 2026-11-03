@@ -90,6 +90,20 @@ for f in "${SURGE_ROOT}"/scripts/*.sh "${SURGE_ROOT}"/scripts/lib/*.sh; do
 done
 pass "POSIX sh syntax valid for all scripts"
 
+# 1b. Rendered service definitions must not contain unresolved ${VAR} placeholders
+if [ "$INIT_SYSTEM" = "systemd" ]; then
+	unit_glob="/etc/systemd/system/xray.service /etc/systemd/system/hysteria.service /etc/systemd/system/gost.service"
+else
+	unit_glob="/etc/init.d/xray /etc/init.d/hysteria /etc/init.d/gost"
+fi
+for uf in $unit_glob; do
+	[ -f "$uf" ] || continue
+	if grep -n '\${' "$uf" | grep -v 'Environment=' >/dev/null 2>&1; then
+		fail "unresolved \${...} placeholder in ${uf}: $(grep -n '\${' "$uf" | head -1)"
+	fi
+done
+pass "rendered service definitions have no unresolved placeholders"
+
 # 2. Xray config & service health
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	[ -x /usr/local/bin/xray ] || fail "/usr/local/bin/xray not executable"
@@ -114,6 +128,10 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	svc_is_enabled hysteria || fail "hysteria service is not enabled on boot"
 	port_is_listening udp "$HYSTERIA_LISTEN_PORT" || fail "hysteria is not listening on udp/${HYSTERIA_LISTEN_PORT}"
 	hysteria_port_hop_active || fail "hysteria port hopping rules (${HYSTERIA_HOP_PORTS} -> :${HYSTERIA_LISTEN_PORT}/udp) missing in iptables"
+	if [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
+		"${SCRIPT_DIR}/hop.sh" || fail "scripts/hop.sh failed (service start hook)"
+		hysteria_port_hop_active || fail "hop rules drifted after scripts/hop.sh (not idempotent)"
+	fi
 	pass "hysteria config valid, service running & boot-enabled, listening on udp/${HYSTERIA_LISTEN_PORT} (ports=${HYSTERIA_CLIENT_PORTS:-$PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
 fi
 

@@ -249,6 +249,10 @@ load_env() {
 		HYSTERIA_CLIENT_PORTS=""
 	fi
 
+	if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
+		validate_hysteria_hop_ports
+	fi
+
 	REALITY_SHORT_IDS_JSON="$(csv_to_json_array "${REALITY_SHORT_IDS}")"
 	FIRST_SHORT_ID="$(printf '%s' "${REALITY_SHORT_IDS}" | cut -d',' -f1 | tr -d '[:space:]')"
 
@@ -340,6 +344,42 @@ install_base_packages() {
 	esac
 }
 
+sha256_of() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{print $1}'
+	else
+		openssl dgst -sha256 "$1" | awk '{print $NF}'
+	fi
+}
+
+# download_verified <url> <dest> <checksum_url> <format: dgst|hashes|sums> <name-in-checksum-file>
+# Verifies SHA-256 against the upstream release checksum file. A mismatch is fatal; a missing
+# checksum file only warns unless SURGE_REQUIRE_CHECKSUM=1.
+download_verified() {
+	dv_url="$1"; dv_dest="$2"; dv_sumurl="$3"; dv_fmt="$4"; dv_name="$5"
+	curl -fsSL --retry 3 --connect-timeout 10 -o "$dv_dest" "$dv_url" || die "download failed: ${dv_url}"
+	dv_sums="${dv_dest}.sums"
+	if ! curl -fsSL --retry 2 --connect-timeout 10 -o "$dv_sums" "$dv_sumurl" 2>/dev/null; then
+		[ "${SURGE_REQUIRE_CHECKSUM:-0}" != "1" ] || die "checksum file unavailable: ${dv_sumurl}"
+		warn "checksum file unavailable, skipping verification of ${dv_name}"
+		return 0
+	fi
+	case "$dv_fmt" in
+		dgst)   dv_want="$(awk '/^SHA2-256=/ {print $2}' "$dv_sums")" ;;
+		hashes) dv_want="$(awk -v n="build/${dv_name}" '$2 == n {print $1}' "$dv_sums")" ;;
+		*)      dv_want="$(awk -v n="${dv_name}" '$2 == n {print $1}' "$dv_sums")" ;;
+	esac
+	rm -f "$dv_sums"
+	if [ -z "$dv_want" ]; then
+		[ "${SURGE_REQUIRE_CHECKSUM:-0}" != "1" ] || die "no checksum entry for ${dv_name}"
+		warn "no checksum entry for ${dv_name}, skipping verification"
+		return 0
+	fi
+	dv_got="$(sha256_of "$dv_dest")"
+	[ "$dv_got" = "$dv_want" ] || die "SHA-256 mismatch for ${dv_name}: expected ${dv_want}, got ${dv_got}"
+	log "verified SHA-256 of ${dv_name}"
+}
+
 install_xray() {
 	if [ "${XRAY_ENABLE:-1}" != "1" ]; then
 		return 0
@@ -356,7 +396,7 @@ install_xray() {
 	log "downloading xray ${XRAY_VERSION} (linux-${XRAY_ARCH}, binary only to save disk/RAM) ..."
 	tmp_dir="$(mktemp -d)"
 	url="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-${XRAY_ARCH}.zip"
-	curl -fsSL --retry 3 --connect-timeout 10 -o "${tmp_dir}/xray.zip" "$url"
+	download_verified "$url" "${tmp_dir}/xray.zip" "${url}.dgst" dgst "Xray-linux-${XRAY_ARCH}.zip"
 	# Extract ONLY the xray executable (skip geoip.dat / geosite.dat ~30MB bloat)
 	unzip -q -o "${tmp_dir}/xray.zip" xray -d "$tmp_dir"
 	install -m 0755 "${tmp_dir}/xray" /usr/local/bin/xray
@@ -380,7 +420,8 @@ install_gost() {
 	log "downloading gost ${GOST_VERSION} (linux_${GOST_ARCH}) ..."
 	tmp_dir="$(mktemp -d)"
 	url="https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${want_ver}_linux_${GOST_ARCH}.tar.gz"
-	curl -fsSL --retry 3 --connect-timeout 10 -o "${tmp_dir}/gost.tar.gz" "$url"
+	download_verified "$url" "${tmp_dir}/gost.tar.gz" \
+		"https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/checksums.txt" sums "gost_${want_ver}_linux_${GOST_ARCH}.tar.gz"
 	tar -xzf "${tmp_dir}/gost.tar.gz" -C "$tmp_dir" gost
 	install -m 0755 "${tmp_dir}/gost" /usr/local/bin/gost
 	rm -rf "$tmp_dir"
@@ -403,7 +444,8 @@ install_hysteria() {
 	log "downloading hysteria ${want_ver} (linux-${HYSTERIA_ARCH}) ..."
 	tmp_dir="$(mktemp -d)"
 	url="https://github.com/apernet/hysteria/releases/download/app%2F${want_ver}/hysteria-linux-${HYSTERIA_ARCH}"
-	curl -fsSL --retry 3 --connect-timeout 10 -o "${tmp_dir}/hysteria" "$url"
+	download_verified "$url" "${tmp_dir}/hysteria" \
+		"https://github.com/apernet/hysteria/releases/download/app%2F${want_ver}/hashes.txt" hashes "hysteria-linux-${HYSTERIA_ARCH}"
 	install -m 0755 "${tmp_dir}/hysteria" /usr/local/bin/hysteria
 	rm -rf "$tmp_dir"
 	log "installed hysteria $(/usr/local/bin/hysteria version 2>/dev/null | awk '/^Version:/ {print $2}')"
@@ -614,6 +656,20 @@ EOF
 	chmod 0600 /etc/hysteria/config.yaml
 }
 
+validate_hysteria_hop_ports() {
+	[ -n "${HYSTERIA_HOP_PORTS:-}" ] || return 0
+	for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
+		case "$item" in
+			''|*[!0-9-]*|-*|*-|*-*-*) die "invalid HYSTERIA_HOP_PORTS entry '${item}' (expected N or N-M)" ;;
+		esac
+		hp_lo="${item%%-*}"
+		hp_hi="${item##*-}"
+		if [ "$hp_lo" -lt 1 ] || [ "$hp_hi" -gt 65535 ] || [ "$hp_lo" -gt "$hp_hi" ]; then
+			die "invalid HYSTERIA_HOP_PORTS range '${item}' (must satisfy 1 <= start <= end <= 65535)"
+		fi
+	done
+}
+
 clear_hysteria_port_hop() {
 	for ipt in iptables ip6tables; do
 		command -v "$ipt" >/dev/null 2>&1 || continue
@@ -625,36 +681,55 @@ clear_hysteria_port_hop() {
 	done
 }
 
-reconcile_hysteria_port_hop() {
-	clear_hysteria_port_hop
-	if [ "${HYSTERIA_ENABLE:-0}" != "1" ] || [ -z "${HYSTERIA_HOP_PORTS:-}" ]; then
-		return 0
-	fi
-	command -v iptables >/dev/null 2>&1 || die "iptables is required when HYSTERIA_HOP_PORTS is set"
+# Desired iptables-save style rule lines, one per hop range (sorted for comparison).
+hysteria_port_hop_desired() {
 	for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
 		[ -n "$item" ] || continue
-		dport_spec="$(printf '%s' "$item" | tr '-' ':')"
-		iptables -t nat -A PREROUTING -p udp -m udp --dport "$dport_spec" \
-			-m comment --comment surge-hy2-hop -j REDIRECT --to-ports "${HYSTERIA_LISTEN_PORT}"
-		if command -v ip6tables >/dev/null 2>&1; then
-			ip6tables -t nat -A PREROUTING -p udp -m udp --dport "$dport_spec" \
-				-m comment --comment surge-hy2-hop -j REDIRECT --to-ports "${HYSTERIA_LISTEN_PORT}" >/dev/null 2>&1 || true
-		fi
-	done
+		printf -- '-A PREROUTING -p udp -m udp --dport %s -m comment --comment surge-hy2-hop -j REDIRECT --to-ports %s\n' \
+			"$(printf '%s' "$item" | tr '-' ':')" "${HYSTERIA_LISTEN_PORT}"
+	done | sort
 }
 
+# True when the installed surge-hy2-hop rules exactly match the desired set (no stale/missing rules).
 hysteria_port_hop_active() {
 	if [ "${HYSTERIA_ENABLE:-0}" != "1" ] || [ -z "${HYSTERIA_HOP_PORTS:-}" ]; then
 		return 0
 	fi
 	command -v iptables >/dev/null 2>&1 || return 1
-	nat_rules="$(iptables -t nat -S PREROUTING 2>/dev/null || true)"
+	have="$(iptables -t nat -S PREROUTING 2>/dev/null | grep -- 'surge-hy2-hop' | sort || true)"
+	want="$(hysteria_port_hop_desired)"
+	[ "$have" = "$want" ]
+}
+
+# Idempotent: leaves matching rules untouched (no traffic gap); otherwise rebuilds the rule set.
+# Never fatal to the caller: hop is an optimisation, the primary Hysteria2 port must stay usable.
+reconcile_hysteria_port_hop() {
+	if [ "${HYSTERIA_ENABLE:-0}" != "1" ] || [ -z "${HYSTERIA_HOP_PORTS:-}" ]; then
+		clear_hysteria_port_hop
+		return 0
+	fi
+	if ! command -v iptables >/dev/null 2>&1; then
+		warn "iptables is required for HYSTERIA_HOP_PORTS; port hopping disabled"
+		return 1
+	fi
+	if hysteria_port_hop_active; then
+		return 0
+	fi
+	clear_hysteria_port_hop
 	for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
 		[ -n "$item" ] || continue
 		dport_spec="$(printf '%s' "$item" | tr '-' ':')"
-		printf '%s\n' "$nat_rules" | grep -F -- "--dport ${dport_spec}" | grep -q -- "surge-hy2-hop" || return 1
+		if ! iptables -t nat -A PREROUTING -p udp -m udp --dport "$dport_spec" \
+			-m comment --comment surge-hy2-hop -j REDIRECT --to-ports "${HYSTERIA_LISTEN_PORT}"; then
+			warn "failed to install hop rule for udp ${dport_spec} (kernel nat/REDIRECT support missing?)"
+			return 1
+		fi
+		if command -v ip6tables >/dev/null 2>&1; then
+			ip6tables -t nat -A PREROUTING -p udp -m udp --dport "$dport_spec" \
+				-m comment --comment surge-hy2-hop -j REDIRECT --to-ports "${HYSTERIA_LISTEN_PORT}" >/dev/null 2>&1 || true
+		fi
 	done
-	return 0
+	log "hysteria port hop active: udp ${HYSTERIA_HOP_PORTS} -> :${HYSTERIA_LISTEN_PORT}"
 }
 
 render_gost_config() {

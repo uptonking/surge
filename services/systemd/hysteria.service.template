@@ -16,7 +16,7 @@ Environment="HYSTERIA_DISABLE_UPDATE_CHECK=true"
 Environment="QUIC_GO_DISABLE_GSO=true"
 Environment="QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING=true"
 ExecStartPre=-/sbin/sysctl -q -p /etc/sysctl.d/99-bbr.conf
-ExecStartPre=-/bin/sh -c '. ${SURGE_ROOT}/scripts/lib/common.sh && load_env && reconcile_hysteria_port_hop'
+ExecStartPre=-${SURGE_ROOT}/scripts/hop.sh
 ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
 Restart=always
 RestartSec=2s

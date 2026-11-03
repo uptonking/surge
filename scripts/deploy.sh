@@ -17,7 +17,14 @@ load_env "${1:-}"
 log "=== surge deploy: node=${NODE_NAME} (${NODE_HOST}) os=${OS_ID} init=${INIT_SYSTEM} ==="
 
 if [ -d "${SURGE_ROOT}/.git" ] && command -v git >/dev/null 2>&1; then
+	old_head="$(git -C "$SURGE_ROOT" rev-parse HEAD 2>/dev/null || true)"
 	git -C "$SURGE_ROOT" pull --ff-only 2>/dev/null || true
+	new_head="$(git -C "$SURGE_ROOT" rev-parse HEAD 2>/dev/null || true)"
+	# Re-exec so the freshly pulled scripts/library (not the stale in-memory copy) render the units.
+	if [ "$old_head" != "$new_head" ] && [ -z "${SURGE_REEXEC:-}" ]; then
+		log "repository updated (${old_head%"${old_head#???????}"} -> ${new_head%"${new_head#???????}"}), re-executing deploy"
+		SURGE_REEXEC=1 exec "$0" "$@"
+	fi
 	load_env "${1:-}"
 fi
 
@@ -56,7 +63,7 @@ fi
 if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	install_hysteria
 	render_hysteria_config
-	reconcile_hysteria_port_hop
+	reconcile_hysteria_port_hop || warn "hysteria port hopping not active; primary port still served"
 	if [ "$INIT_SYSTEM" = "systemd" ]; then
 		render_template "${SURGE_ROOT}/services/systemd/hysteria.service.template" /etc/systemd/system/hysteria.service
 	else
