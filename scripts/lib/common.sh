@@ -96,34 +96,36 @@ detect_resources() {
 
 	DISK_AVAIL_MB="$(df -Pm / | awk 'NR==2 {print $4}' 2>/dev/null || echo 500)"
 
+	NCPU="$(nproc 2>/dev/null || echo 1)"
+	GOGC="100"
+	if [ "$NCPU" -ge 2 ]; then
+		GOMAXPROCS="$NCPU"
+	else
+		GOMAXPROCS="1"
+	fi
+
 	if [ "$MEM_MB" -le 320 ]; then
-		GOGC="50"
-		GOMAXPROCS="1"
-		XRAY_GOMEMLIMIT="48MiB"
-		HYSTERIA_GOMEMLIMIT="48MiB"
-		GOST_GOMEMLIMIT="24MiB"
-		HYSTERIA_INIT_STREAM_WIN="524288"
-		HYSTERIA_MAX_STREAM_WIN="4194304"
-		HYSTERIA_INIT_CONN_WIN="1310720"
-		HYSTERIA_MAX_CONN_WIN="10485760"
-		HYSTERIA_MAX_STREAMS="256"
+		XRAY_GOMEMLIMIT="160MiB"
+		HYSTERIA_GOMEMLIMIT="140MiB"
+		GOST_GOMEMLIMIT="96MiB"
+		HYSTERIA_INIT_STREAM_WIN="1048576"
+		HYSTERIA_MAX_STREAM_WIN="8388608"
+		HYSTERIA_INIT_CONN_WIN="2621440"
+		HYSTERIA_MAX_CONN_WIN="20971520"
+		HYSTERIA_MAX_STREAMS="512"
 	elif [ "$MEM_MB" -le 512 ]; then
-		GOGC="50"
-		GOMAXPROCS="1"
-		XRAY_GOMEMLIMIT="64MiB"
-		HYSTERIA_GOMEMLIMIT="64MiB"
-		GOST_GOMEMLIMIT="32MiB"
+		XRAY_GOMEMLIMIT="300MiB"
+		HYSTERIA_GOMEMLIMIT="256MiB"
+		GOST_GOMEMLIMIT="160MiB"
 		HYSTERIA_INIT_STREAM_WIN="1048576"
 		HYSTERIA_MAX_STREAM_WIN="8388608"
 		HYSTERIA_INIT_CONN_WIN="2621440"
 		HYSTERIA_MAX_CONN_WIN="20971520"
 		HYSTERIA_MAX_STREAMS="1024"
 	else
-		GOGC="75"
-		GOMAXPROCS="2"
-		XRAY_GOMEMLIMIT="128MiB"
-		HYSTERIA_GOMEMLIMIT="96MiB"
-		GOST_GOMEMLIMIT="48MiB"
+		XRAY_GOMEMLIMIT="512MiB"
+		HYSTERIA_GOMEMLIMIT="512MiB"
+		GOST_GOMEMLIMIT="256MiB"
 		HYSTERIA_INIT_STREAM_WIN="1048576"
 		HYSTERIA_MAX_STREAM_WIN="8388608"
 		HYSTERIA_INIT_CONN_WIN="2621440"
@@ -270,7 +272,7 @@ load_env() {
 						*/*) lport="${item%%/*}"; target="${item#*/}" ;;
 						*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
 					esac
-					GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
+					GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=300s&nodelay=true"
 				done
 			fi
 			if [ -n "${GOST_FORWARD_UDP:-}" ]; then
@@ -754,7 +756,7 @@ render_gost_config() {
 				*/*) lport="${item%%/*}"; target="${item#*/}" ;;
 				*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
 			esac
-			set -- "$@" -L "tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
+			set -- "$@" -L "tcp://:${lport}/${target}?keepAlive=true&ttl=300s&nodelay=true"
 		done
 	fi
 	if [ -n "${GOST_FORWARD_UDP:-}" ]; then
