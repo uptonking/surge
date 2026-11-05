@@ -17,7 +17,7 @@ refresh_hosts_cache || true
 
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	if ! svc_is_active xray || ! port_is_listening tcp "$VLESS_LISTEN_PORT"; then
-		svc_enable_and_restart xray >/dev/null 2>&1 || true
+		svc_restart xray >/dev/null 2>&1 || svc_enable_and_restart xray >/dev/null 2>&1 || true
 	fi
 fi
 
@@ -26,11 +26,11 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 		reconcile_hysteria_port_hop >/dev/null 2>&1 || true
 	fi
 	if ! svc_is_active hysteria; then
-		svc_enable_and_restart hysteria >/dev/null 2>&1 || true
+		svc_restart hysteria >/dev/null 2>&1 || svc_enable_and_restart hysteria >/dev/null 2>&1 || true
 	elif ! port_is_listening udp "$HYSTERIA_LISTEN_PORT"; then
 		# Only restart if ACME cert already exists or using self-signed mode (avoid interrupting initial ACME DNS-01 challenge)
-		if [ "${HYSTERIA_TLS_MODE}" = "self-signed" ] || ls /etc/hysteria/acme/*/*.crt >/dev/null 2>&1; then
-			svc_enable_and_restart hysteria >/dev/null 2>&1 || true
+		if [ "${HYSTERIA_TLS_MODE}" = "self-signed" ] || [ -n "$(find /etc/hysteria/acme -name '*.crt' 2>/dev/null | head -n 1)" ]; then
+			svc_restart hysteria >/dev/null 2>&1 || svc_enable_and_restart hysteria >/dev/null 2>&1 || true
 		fi
 	fi
 fi
@@ -42,7 +42,7 @@ if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		port_is_listening tcp "$p" || gost_ok=0
 	done
 	if [ "$gost_ok" -eq 0 ]; then
-		svc_enable_and_restart gost >/dev/null 2>&1 || true
+		svc_restart gost >/dev/null 2>&1 || svc_enable_and_restart gost >/dev/null 2>&1 || true
 	fi
 fi
 

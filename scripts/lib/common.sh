@@ -809,7 +809,10 @@ resolve_ipv4_dns() {
 		*) printf '%s' "$host"; return 0 ;;
 	esac
 	ip=""
-	if command -v resolvectl >/dev/null 2>&1; then
+	if command -v dig >/dev/null 2>&1; then
+		ip="$(dig +short +time=2 +tries=1 A "$host" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+	fi
+	if [ -z "$ip" ] && command -v resolvectl >/dev/null 2>&1; then
 		ip="$(resolvectl query -4 --legend=no "$host" 2>/dev/null | awk 'NR==1 {for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {print $i; exit}}' || true)"
 	fi
 	if [ -z "$ip" ] && command -v nslookup >/dev/null 2>&1; then
@@ -1022,6 +1025,27 @@ svc_is_enabled() {
 		systemctl is-enabled --quiet "$svc" 2>/dev/null
 	else
 		rc-update show default 2>/dev/null | grep -Eq "[[:space:]]${svc}[[:space:]]"
+	fi
+}
+
+svc_restart() {
+	svc="$1"
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		systemctl restart "$svc"
+	else
+		if ! rc-service "$svc" status >/dev/null 2>&1; then
+			rc-service "$svc" zap >/dev/null 2>&1 || true
+		fi
+		rc-service "$svc" restart
+	fi
+}
+
+svc_stop() {
+	svc="$1"
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		systemctl stop "$svc" >/dev/null 2>&1 || true
+	else
+		rc-service "$svc" stop >/dev/null 2>&1 || true
 	fi
 }
 

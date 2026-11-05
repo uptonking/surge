@@ -81,7 +81,16 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 			wait_i=$((wait_i + 1))
 		done
 	fi
-	log "hysteria enabled and started on UDP :${HYSTERIA_LISTEN_PORT} (public ${NODE_HOST}:${HYSTERIA_CLIENT_PORTS:-$PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
+	if port_is_listening udp "$HYSTERIA_LISTEN_PORT"; then
+		log "hysteria enabled and started on UDP :${HYSTERIA_LISTEN_PORT} (public ${NODE_HOST}:${HYSTERIA_CLIENT_PORTS:-$PUBLIC_HYSTERIA_PORT}, tls=${HYSTERIA_TLS_MODE})"
+	else
+		warn "hysteria failed to bind UDP :${HYSTERIA_LISTEN_PORT} after 90s; inspect logs below:"
+		if [ "$INIT_SYSTEM" = "systemd" ]; then
+			journalctl -u hysteria -n 15 --no-pager 2>/dev/null || true
+		else
+			tail -n 15 /var/log/hysteria.log 2>/dev/null || true
+		fi
+	fi
 else
 	clear_hysteria_port_hop
 	svc_disable_and_stop hysteria
