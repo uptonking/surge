@@ -16,17 +16,16 @@ if [ "${1:-}" = "--remote" ]; then
 	measure_clash_delay() {
 		m_pname="$1"
 		m_tms="${2:-5000}"
-		m_res="$(curl -fsS "http://127.0.0.1:9090/proxies/${m_pname}/delay?timeout=${m_tms}&url=http://www.gstatic.com/generate_204" 2>/dev/null || true)"
-		case "$m_res" in
-			*'"delay":'*) printf '%s' "$m_res"; return 0 ;;
-		esac
-		sleep 1
-		m_res="$(curl -fsS "http://127.0.0.1:9090/proxies/${m_pname}/delay?timeout=${m_tms}&url=http://cp.cloudflare.com/generate_204" 2>/dev/null || echo '{"error":"timeout"}')"
-		printf '%s' "$m_res"
-		case "$m_res" in
-			*'"delay":'*) return 0 ;;
-			*) return 1 ;;
-		esac
+		m_res=""
+		for m_url in "http://www.gstatic.com/generate_204" "http://cp.cloudflare.com/generate_204" "http://connect.rom.miui.com/generate_204"; do
+			m_res="$(curl -s --max-time "$((m_tms / 1000 + 2))" "http://127.0.0.1:9090/proxies/${m_pname}/delay?timeout=${m_tms}&url=${m_url}" 2>/dev/null || true)"
+			case "$m_res" in
+				*'"delay":'*) printf '%s' "$m_res"; return 0 ;;
+			esac
+			sleep 1
+		done
+		printf '%s' "${m_res:-{\"error\":\"timeout\"}}"
+		return 1
 	}
 
 	for n in $nodes; do
