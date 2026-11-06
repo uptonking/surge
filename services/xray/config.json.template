@@ -6,9 +6,9 @@
   },
   "dns": {
     "servers": [
-      "1.1.1.1",
-      "8.8.8.8",
-      "localhost"
+      "localhost",
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
     ],
     "queryStrategy": "UseIPv4",
     "enableParallelQuery": true,
@@ -20,8 +20,8 @@
       "0": {
         "handshake": 15,
         "connIdle": 300,
-        "uplinkOnly": 10,
-        "downlinkOnly": 30,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
         "bufferSize": 256
       }
     }
