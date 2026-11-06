@@ -1171,7 +1171,7 @@ svc_is_enabled() {
 	if [ "$INIT_SYSTEM" = "systemd" ]; then
 		systemctl is-enabled --quiet "$svc" 2>/dev/null
 	else
-		rc-update show default 2>/dev/null | grep -Eq "[[:space:]]${svc}[[:space:]]"
+		rc-update show 2>/dev/null | grep -Eq "(^|[[:space:]])${svc}[[:space:]]*\\|"
 	fi
 }
 
