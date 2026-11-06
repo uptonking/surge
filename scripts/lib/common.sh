@@ -894,17 +894,17 @@ resolve_ipv4_dns() {
 		*) printf '%s' "$host"; return 0 ;;
 	esac
 	ip=""
-	if command -v dig >/dev/null 2>&1; then
-		ip="$(dig +short +time=2 +tries=1 A "$host" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+	if command -v getent >/dev/null 2>&1; then
+		ip="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1 {print $1}' || true)"
 	fi
-	if [ -z "$ip" ] && command -v resolvectl >/dev/null 2>&1; then
-		ip="$(resolvectl query -4 --legend=no "$host" 2>/dev/null | awk 'NR==1 {for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {print $i; exit}}' || true)"
+	if [ -z "$ip" ] && command -v dig >/dev/null 2>&1; then
+		ip="$(dig +short +time=2 +tries=1 A "$host" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
 	fi
 	if [ -z "$ip" ] && command -v nslookup >/dev/null 2>&1; then
 		ip="$(nslookup -type=a "$host" 2>/dev/null | awk '/^Address:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $2; exit}' || true)"
 	fi
-	if [ -z "$ip" ] && command -v getent >/dev/null 2>&1; then
-		ip="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1 {print $1}' || true)"
+	if [ -z "$ip" ] && command -v resolvectl >/dev/null 2>&1 && systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+		ip="$(resolvectl query -4 --legend=no "$host" 2>/dev/null | awk 'NR==1 {for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {print $i; exit}}' || true)"
 	fi
 	printf '%s' "$ip"
 }

@@ -18,10 +18,10 @@
   "policy": {
     "levels": {
       "0": {
-        "handshake": 15,
+        "handshake": 20,
         "connIdle": 300,
-        "uplinkOnly": 2,
-        "downlinkOnly": 5,
+        "uplinkOnly": 6,
+        "downlinkOnly": 10,
         "bufferSize": 256
       }
     }
@@ -60,7 +60,7 @@
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
           "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
-          "tcpUserTimeout": 10000
+          "tcpUserTimeout": 20000
         }
       },
       "sniffing": {
@@ -87,7 +87,7 @@
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
           "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
-          "tcpUserTimeout": 10000
+          "tcpUserTimeout": 20000
         }
       }
     },
