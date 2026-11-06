@@ -15,9 +15,9 @@ if [ "${1:-}" = "--remote" ]; then
 
 	measure_clash_delay() {
 		m_pname="$1"
-		m_tms="${2:-5000}"
+		m_tms="${2:-6000}"
 		m_res=""
-		for m_url in "http://cp.cloudflare.com/generate_204" "http://www.gstatic.com/generate_204" "http://connect.rom.miui.com/generate_204"; do
+		for m_url in "http%3A%2F%2Fcp.cloudflare.com%2Fgenerate_204" "http%3A%2F%2Fwww.gstatic.com%2Fgenerate_204" "http%3A%2F%2Fconnect.rom.miui.com%2Fgenerate_204"; do
 			m_res="$(curl -s --max-time "$((m_tms / 1000 + 2))" "http://127.0.0.1:9090/proxies/${m_pname}/delay?timeout=${m_tms}&url=${m_url}" 2>/dev/null || true)"
 			case "$m_res" in
 				*'"delay":'*) printf '%s' "$m_res"; return 0 ;;
@@ -51,7 +51,7 @@ if [ "${1:-}" = "--remote" ]; then
 		}
 		if curl -fsS --max-time 2 http://127.0.0.1:9090/version >/dev/null 2>&1; then
 			if [ -n "$hy_name" ]; then
-				if delay="$(measure_clash_delay "$hy_name" 5000)"; then
+				if delay="$(measure_clash_delay "$hy_name" 6000)"; then
 					printf '  [PASS] ClashX Meta %-14s -> %s\n' "$hy_name" "$delay"
 				else
 					case "$n" in
