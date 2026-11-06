@@ -862,7 +862,7 @@ render_gost_config() {
 				*/*) lport="${item%%/*}"; target="${item#*/}" ;;
 				*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
 			esac
-			set -- "$@" -L "tcp://:${lport}/${target}?keepAlive=true&ttl=300s&nodelay=true"
+			set -- "$@" -L "tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
 		done
 	fi
 	if [ -n "${GOST_FORWARD_UDP:-}" ]; then
@@ -1018,11 +1018,14 @@ tune_os() {
 
 	# Determine max TCP socket buffer based on available RAM to prevent cgroup socket throttling
 	if [ "$MEM_MB" -le 512 ]; then
-		tcp_buf_max="4194304"
+		tcp_buf_max="1048576"
+		tcp_buf_default="65536"
 	elif [ "$MEM_MB" -le 1024 ]; then
-		tcp_buf_max="16777216"
+		tcp_buf_max="4194304"
+		tcp_buf_default="131072"
 	else
-		tcp_buf_max="67108864"
+		tcp_buf_max="16777216"
+		tcp_buf_default="262144"
 	fi
 
 	# Probe and persist BBR + TCP socket tuning to /etc/sysctl.d/99-bbr.conf
@@ -1040,6 +1043,8 @@ tune_os() {
 net.ipv4.tcp_congestion_control=bbr
 net.core.default_qdisc=fq
 net.ipv4.tcp_fastopen=3
+net.core.rmem_default=${tcp_buf_default}
+net.core.wmem_default=${tcp_buf_default}
 net.core.rmem_max=${tcp_buf_max}
 net.core.wmem_max=${tcp_buf_max}
 net.ipv4.tcp_rmem=4096 87380 ${tcp_buf_max}
@@ -1059,8 +1064,8 @@ net.ipv4.tcp_ecn=0
 net.ipv4.tcp_notsent_lowat=16384
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_slow_start_after_idle=0
-net.ipv4.tcp_tw_reuse=0
-net.ipv4.tcp_fin_timeout=10
+net.ipv4.tcp_tw_reuse=1
+net.ipv4.tcp_fin_timeout=15
 net.ipv4.tcp_orphan_retries=2
 net.ipv4.tcp_retries2=8
 net.ipv4.tcp_keepalive_time=60
