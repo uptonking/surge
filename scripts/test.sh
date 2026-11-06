@@ -135,7 +135,8 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	# 3. Reality camouflage target reachability & /etc/hosts cache
 	reality_host="${REALITY_DEST%:*}"
 	grep -q "^# BEGIN SURGE HOSTS" /etc/hosts || fail "/etc/hosts missing SURGE HOSTS block"
-	curl -4 -fsS --max-time 5 -o /dev/null "https://${reality_host}" || fail "REALITY_DEST https://${reality_host} unreachable"
+	code="$(curl -4 -sS --max-time 5 -o /dev/null -w '%{http_code}' "https://${reality_host}" 2>/dev/null || echo 000)"
+	[ "$code" != "000" ] || fail "REALITY_DEST https://${reality_host} unreachable"
 	pass "REALITY target https://${reality_host} reachable and cached in /etc/hosts"
 fi
 
