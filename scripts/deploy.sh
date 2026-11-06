@@ -30,6 +30,7 @@ fi
 
 install_base_packages
 tune_os
+apply_kernel_tuning
 cleanup_legacy_services
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	install_xray

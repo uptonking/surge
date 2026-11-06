@@ -137,6 +137,20 @@ detect_resources() {
 	export HYSTERIA_INIT_STREAM_WIN HYSTERIA_MAX_STREAM_WIN HYSTERIA_INIT_CONN_WIN HYSTERIA_MAX_CONN_WIN HYSTERIA_MAX_STREAMS
 }
 
+apply_kernel_tuning() {
+	# Prevent dead TCP connections from lingering in LAST-ACK / FIN-WAIT on NAT & LXC nodes
+	sysctl -w net.ipv4.tcp_orphan_retries=2 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_fin_timeout=10 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_tw_reuse=1 >/dev/null 2>&1 || true
+	if [ -d /etc/sysctl.d ]; then
+		cat > /etc/sysctl.d/99-surge-tcp.conf <<'EOF'
+net.ipv4.tcp_orphan_retries = 2
+net.ipv4.tcp_fin_timeout = 10
+net.ipv4.tcp_tw_reuse = 1
+EOF
+	fi
+}
+
 csv_to_json_array() {
 	printf '%s' "$1" | awk -F',' '{
 		printf "["
@@ -260,6 +274,14 @@ load_env() {
 
 	sni_list="${REALITY_SERVER_NAMES:-$REALITY_SNI}"
 	REALITY_SERVER_NAMES_JSON="$(csv_to_json_array "$sni_list")"
+
+	# If node does not have working IPv6 outbound, block IPv6 global unicast (::/0)
+	# so outbound connections immediately fail-fast to IPv4 instead of hanging.
+	if ping6 -c 1 -w 1 2001:4860:4860::8888 >/dev/null 2>&1; then
+		BLOCKED_IPS_JSON='["10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"]'
+	else
+		BLOCKED_IPS_JSON='["10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10","::/0"]'
+	fi
 
 	GOST_ARGS=""
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
@@ -578,6 +600,7 @@ render_template() {
 		-e "s|\${REALITY_MIN_CLIENT_VER}|$(escape_sed "${REALITY_MIN_CLIENT_VER}")|g" \
 		-e "s|\${REALITY_MAX_TIME_DIFF}|$(escape_sed "${REALITY_MAX_TIME_DIFF}")|g" \
 		-e "s|\${REALITY_SHORT_IDS_JSON}|$(escape_sed "${REALITY_SHORT_IDS_JSON}")|g" \
+		-e "s|\${BLOCKED_IPS_JSON}|$(escape_sed "${BLOCKED_IPS_JSON}")|g" \
 		-e "s|\${TCP_KEEPALIVE_IDLE}|$(escape_sed "${TCP_KEEPALIVE_IDLE}")|g" \
 		-e "s|\${TCP_KEEPALIVE_INTERVAL}|$(escape_sed "${TCP_KEEPALIVE_INTERVAL}")|g" \
 		-e "s|\${TCP_USER_TIMEOUT}|$(escape_sed "${TCP_USER_TIMEOUT}")|g" \
@@ -921,7 +944,9 @@ net.ipv4.tcp_notsent_lowat=16384
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_slow_start_after_idle=0
 net.ipv4.tcp_tw_reuse=1
-net.ipv4.tcp_fin_timeout=15
+net.ipv4.tcp_fin_timeout=10
+net.ipv4.tcp_orphan_retries=2
+net.ipv4.tcp_retries2=8
 net.ipv4.tcp_keepalive_time=60
 net.ipv4.tcp_keepalive_intvl=15
 net.ipv4.tcp_keepalive_probes=4
