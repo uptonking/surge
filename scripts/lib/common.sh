@@ -376,7 +376,7 @@ load_env() {
 						*/*) lport="${item%%/*}"; target="${item#*/}" ;;
 						*)   lport="${GOST_LISTEN_PORT}"; target="$item" ;;
 					esac
-					GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=300s&nodelay=true"
+					GOST_ARGS="${GOST_ARGS:+$GOST_ARGS }-L tcp://:${lport}/${target}?keepAlive=true&ttl=30s&nodelay=true"
 				done
 			fi
 			if [ -n "${GOST_FORWARD_UDP:-}" ]; then
