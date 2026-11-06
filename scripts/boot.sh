@@ -20,10 +20,13 @@ log "=== surge boot initialization: node=${NODE_NAME} os=${OS_ID} init=${INIT_SY
 [ -f /etc/sysctl.d/99-bbr.conf ] && sysctl -q -p /etc/sysctl.d/99-bbr.conf >/dev/null 2>&1 || true
 [ -f /etc/sysctl.d/99-surge-tcp.conf ] && sysctl -q -p /etc/sysctl.d/99-surge-tcp.conf >/dev/null 2>&1 || true
 
-# 2. Pin Reality and Gost targets into /etc/hosts to survive DHCP / cloud-init overwrites
+# 2. Ensure /etc/resolv.conf is valid and uncorrupted
+ensure_clean_resolv_conf || true
+
+# 3. Pin Reality and Gost targets into /etc/hosts to survive DHCP / cloud-init overwrites
 refresh_hosts_cache || true
 
-# 3. Restore Hysteria2 port hopping REDIRECT rules before UDP traffic arrives
+# 4. Restore Hysteria2 port hopping REDIRECT rules before UDP traffic arrives
 if [ "${HYSTERIA_ENABLE:-0}" = "1" ] && [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
 	reconcile_hysteria_port_hop || warn "hysteria port hop initialization failed"
 fi

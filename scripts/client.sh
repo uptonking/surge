@@ -52,7 +52,7 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 		printf '\nhysteria2 URI (%s, tls=%s, ports=%s):\n  %s\n\n' "$hy_name" "$HYSTERIA_TLS_MODE" "$HYSTERIA_CLIENT_PORTS" "$hy_uri"
 		printf 'ClashX Meta Hysteria2 proxy entry:\n'
 		printf "  - { name: '%s', type: hysteria2, server: %s, port: %s, ports: '%s', hop-interval: %s, password: '%s', sni: '%s', skip-cert-verify: %s, udp: true, alpn: [h3] }\n" \
-			"$hy_name" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_CLIENT_PORTS" "${HYSTERIA_HOP_INTERVAL:-30}" "$HYSTERIA_PASSWORD" "$HYSTERIA_SNI" "$HYSTERIA_SKIP_CERT_VERIFY"
+			"$hy_name" "$NODE_HOST" "$PUBLIC_HYSTERIA_PORT" "$HYSTERIA_CLIENT_PORTS" "${HYSTERIA_HOP_INTERVAL:-60}" "$HYSTERIA_PASSWORD" "$HYSTERIA_SNI" "$HYSTERIA_SKIP_CERT_VERIFY"
 	else
 		hy_uri="hysteria2://${HYSTERIA_PASSWORD}@${NODE_HOST}:${PUBLIC_HYSTERIA_PORT}?sni=${HYSTERIA_SNI}&insecure=${hy_insecure}#${hy_name}"
 		printf '\nhysteria2 URI (%s, tls=%s):\n  %s\n\n' "$hy_name" "$HYSTERIA_TLS_MODE" "$hy_uri"

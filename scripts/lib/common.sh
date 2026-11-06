@@ -910,6 +910,25 @@ gost_tcp_ports() {
 	printf '%s' "${GOST_LISTEN_PORT}"
 }
 
+ensure_clean_resolv_conf() {
+	[ -w /etc ] || return 0
+	gw_ip="$(ip route show default 2>/dev/null | awk '{print $3}' | head -n 1 || true)"
+	rm -f /etc/resolv.conf
+	{
+		if [ -f /run/systemd/resolve/resolv.conf ]; then
+			awk '/^nameserver/ && !/127\./ {print $0}' /run/systemd/resolve/resolv.conf 2>/dev/null || true
+		fi
+		case "$gw_ip" in
+			10.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|192.168.*)
+				echo "nameserver $gw_ip"
+				;;
+		esac
+		echo "nameserver 1.1.1.1"
+		echo "nameserver 8.8.8.8"
+		echo "options timeout:2 attempts:2"
+	} | awk '!seen[$0]++' > /etc/resolv.conf
+}
+
 resolve_ipv4_dns() {
 	host="$1"
 	case "$host" in
@@ -1072,12 +1091,7 @@ EOF
 			systemctl stop systemd-logind 2>/dev/null || true
 			systemctl disable systemd-logind 2>/dev/null || true
 			systemctl mask systemd-logind 2>/dev/null || true
-			rm -f /etc/resolv.conf
-			cat > /etc/resolv.conf <<'EOF_RESOLV'
-nameserver 10.88.0.1
-nameserver 1.1.1.1
-nameserver 8.8.8.8
-EOF_RESOLV
+			ensure_clean_resolv_conf
 		fi
 		# Cap journald disk usage to 16M on small Debian/Ubuntu containers
 		mkdir -p /etc/systemd/journald.conf.d
