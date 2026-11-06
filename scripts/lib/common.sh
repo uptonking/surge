@@ -161,9 +161,9 @@ detect_resources() {
 }
 
 apply_kernel_tuning() {
-	# Prevent dead TCP connections and PAWS drops on NAT & LXC nodes
+	# Prevent dead TCP connections, socket throttling, and PAWS drops on NAT & LXC nodes
 	if [ "${MEM_MB:-1024}" -le 512 ]; then
-		tcp_buf_max="4194304"
+		tcp_buf_max="1048576"
 	else
 		tcp_buf_max="16777216"
 	fi
@@ -171,6 +171,11 @@ apply_kernel_tuning() {
 	sysctl -w net.ipv4.tcp_fin_timeout=10 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_tw_reuse=0 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_timestamps=0 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_synack_retries=2 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_syn_retries=3 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.conf.all.rp_filter=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.conf.default.rp_filter=1 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_keepalive_time=30 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_keepalive_intvl=10 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_keepalive_probes=3 >/dev/null 2>&1 || true
@@ -183,6 +188,11 @@ net.ipv4.tcp_orphan_retries = 2
 net.ipv4.tcp_fin_timeout = 10
 net.ipv4.tcp_tw_reuse = 0
 net.ipv4.tcp_timestamps = 0
+net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_synack_retries = 2
+net.ipv4.tcp_syn_retries = 3
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
 net.ipv4.tcp_keepalive_time = 30
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
@@ -998,6 +1008,11 @@ net.ipv4.tcp_adv_win_scale=1
 net.ipv4.tcp_sack=1
 net.ipv4.tcp_dsack=1
 net.ipv4.tcp_timestamps=0
+net.ipv4.tcp_rfc1337=1
+net.ipv4.tcp_synack_retries=2
+net.ipv4.tcp_syn_retries=3
+net.ipv4.conf.all.rp_filter=1
+net.ipv4.conf.default.rp_filter=1
 net.ipv4.tcp_ecn=0
 net.ipv4.tcp_notsent_lowat=16384
 net.ipv4.tcp_mtu_probing=1
@@ -1018,6 +1033,21 @@ net.core.somaxconn=4096
 EOF
 
 	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		# On small Debian/Ubuntu LXC containers, disable resource-heavy background daemons
+		if [ "${MEM_MB:-1024}" -le 512 ]; then
+			systemctl stop systemd-resolved 2>/dev/null || true
+			systemctl disable systemd-resolved 2>/dev/null || true
+			systemctl mask systemd-resolved 2>/dev/null || true
+			systemctl stop polkit 2>/dev/null || true
+			systemctl disable polkit 2>/dev/null || true
+			systemctl mask polkit 2>/dev/null || true
+			rm -f /etc/resolv.conf
+			cat > /etc/resolv.conf <<'EOF_RESOLV'
+nameserver 10.88.0.1
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF_RESOLV
+		fi
 		# Cap journald disk usage to 16M on small Debian/Ubuntu containers
 		mkdir -p /etc/systemd/journald.conf.d
 		cat > /etc/systemd/journald.conf.d/99-surge.conf <<'EOF'

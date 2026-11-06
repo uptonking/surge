@@ -59,7 +59,8 @@
           "tcpFastOpen": false,
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
-          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL}
+          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
+          "tcpUserTimeout": 10000
         }
       },
       "sniffing": {
@@ -85,7 +86,8 @@
           "tcpFastOpen": false,
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
-          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL}
+          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
+          "tcpUserTimeout": 10000
         }
       }
     },
