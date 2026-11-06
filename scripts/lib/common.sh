@@ -1041,6 +1041,14 @@ EOF
 			systemctl stop polkit 2>/dev/null || true
 			systemctl disable polkit 2>/dev/null || true
 			systemctl mask polkit 2>/dev/null || true
+			# Disable PAM systemd user sessions to prevent 1.2s 100% CPU lockups on SSH logout
+			if [ -f /etc/pam.d/common-session ]; then
+				sed -i 's/^session[[:space:]]\+optional[[:space:]]\+pam_systemd\.so/# &/' /etc/pam.d/common-session 2>/dev/null || true
+			fi
+			systemctl stop user@0.service 2>/dev/null || true
+			systemctl stop systemd-logind 2>/dev/null || true
+			systemctl disable systemd-logind 2>/dev/null || true
+			systemctl mask systemd-logind 2>/dev/null || true
 			rm -f /etc/resolv.conf
 			cat > /etc/resolv.conf <<'EOF_RESOLV'
 nameserver 10.88.0.1
