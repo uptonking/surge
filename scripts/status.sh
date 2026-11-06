@@ -43,6 +43,13 @@ else
 	printf 'hysteria : disabled (HYSTERIA_ENABLE=0)\n'
 fi
 
+if [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ]; then
+	printf 'relay    : enabled (listen: 0.0.0.0:%s/tcp -> %s via Xray)\n' \
+		"${RELAY_LISTEN_PORT:-80}" "$RELAY_FORWARD"
+else
+	printf 'relay    : disabled (RELAY_ENABLE=0)\n'
+fi
+
 if [ "${GOST_ENABLE:-0}" = "1" ]; then
 	gost_active="stopped"
 	gost_enabled="disabled"

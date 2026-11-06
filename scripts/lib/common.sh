@@ -237,6 +237,9 @@ load_env() {
 		_cli_HYSTERIA_HOP_INTERVAL="${HYSTERIA_HOP_INTERVAL:-}"
 		_cli_HYSTERIA_SNI="${HYSTERIA_SNI:-}"
 		_cli_HYSTERIA_CF_DNS_TOKEN="${HYSTERIA_CF_DNS_TOKEN:-}"
+		_cli_RELAY_ENABLE="${RELAY_ENABLE:-}"
+		_cli_RELAY_LISTEN_PORT="${RELAY_LISTEN_PORT:-}"
+		_cli_RELAY_FORWARD="${RELAY_FORWARD:-}"
 		_cli_GOST_ENABLE="${GOST_ENABLE:-}"
 		_cli_GOST_LISTEN_PORT="${GOST_LISTEN_PORT:-}"
 		_cli_GOST_FORWARD_TCP="${GOST_FORWARD_TCP:-}"
@@ -289,6 +292,9 @@ load_env() {
 	[ -n "$_cli_HYSTERIA_HOP_INTERVAL" ] && HYSTERIA_HOP_INTERVAL="$_cli_HYSTERIA_HOP_INTERVAL"
 	[ -n "$_cli_HYSTERIA_SNI" ] && HYSTERIA_SNI="$_cli_HYSTERIA_SNI"
 	[ -n "$_cli_HYSTERIA_CF_DNS_TOKEN" ] && HYSTERIA_CF_DNS_TOKEN="$_cli_HYSTERIA_CF_DNS_TOKEN"
+	[ -n "$_cli_RELAY_ENABLE" ] && RELAY_ENABLE="$_cli_RELAY_ENABLE"
+	[ -n "$_cli_RELAY_LISTEN_PORT" ] && RELAY_LISTEN_PORT="$_cli_RELAY_LISTEN_PORT"
+	[ -n "$_cli_RELAY_FORWARD" ] && RELAY_FORWARD="$_cli_RELAY_FORWARD"
 	[ -n "$_cli_GOST_ENABLE" ] && GOST_ENABLE="$_cli_GOST_ENABLE"
 	[ -n "$_cli_GOST_LISTEN_PORT" ] && GOST_LISTEN_PORT="$_cli_GOST_LISTEN_PORT"
 	[ -n "$_cli_GOST_FORWARD_TCP" ] && GOST_FORWARD_TCP="$_cli_GOST_FORWARD_TCP"
@@ -365,6 +371,20 @@ load_env() {
 		BLOCKED_UDP_RULE=''
 	fi
 
+	# Native Xray dokodemo-door TCP relay
+	RELAY_ENABLE="${RELAY_ENABLE:-0}"
+	RELAY_LISTEN_PORT="${RELAY_LISTEN_PORT:-80}"
+	RELAY_FORWARD="${RELAY_FORWARD:-}"
+	RELAY_INBOUND_JSON=""
+	RELAY_ROUTING_RULE_JSON=""
+	if [ "${RELAY_ENABLE}" = "1" ] && [ -n "${RELAY_FORWARD}" ]; then
+		relay_target_host="${RELAY_FORWARD%:*}"
+		relay_target_port="${RELAY_FORWARD##*:}"
+		relay_lport="${RELAY_LISTEN_PORT}"
+		RELAY_INBOUND_JSON=",{\"tag\":\"in-relay\",\"listen\":\"0.0.0.0\",\"port\":${relay_lport},\"protocol\":\"dokodemo-door\",\"settings\":{\"address\":\"${relay_target_host}\",\"port\":${relay_target_port},\"network\":\"tcp\"},\"streamSettings\":{\"sockopt\":{\"tcpFastOpen\":false,\"tcpCongestion\":\"bbr\",\"tcpKeepAliveIdle\":${TCP_KEEPALIVE_IDLE},\"tcpKeepAliveInterval\":${TCP_KEEPALIVE_INTERVAL}}}}"
+		RELAY_ROUTING_RULE_JSON="{\"type\":\"field\",\"inboundTag\":[\"in-relay\"],\"outboundTag\":\"direct\"},"
+	fi
+
 	GOST_ARGS=""
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		if [ -n "${GOST_CONFIG_TEMPLATE:-}" ]; then
@@ -403,6 +423,7 @@ load_env() {
 	export NODE_NAME DISPLAY_NAME NODE_HOST XRAY_ENABLE PUBLIC_VLESS_PORT VLESS_LISTEN_PORT
 	export HYSTERIA_ENABLE HYSTERIA_VERSION PUBLIC_HYSTERIA_PORT HYSTERIA_LISTEN_PORT HYSTERIA_HOP_PORTS HYSTERIA_HOP_INTERVAL HYSTERIA_CLIENT_PORTS HYSTERIA_SNI HYSTERIA_ACME_EMAIL HYSTERIA_MASQUERADE_URL HYSTERIA_TLS_MODE HYSTERIA_SKIP_CERT_VERIFY
 	export GOST_ENABLE GOST_LISTEN_PORT GOST_FORWARD_TCP GOST_FORWARD_UDP GOST_RULES GOST_CHAINS GOST_EXTRA_ARGS GOST_CONFIG_TEMPLATE
+	export RELAY_ENABLE RELAY_LISTEN_PORT RELAY_FORWARD RELAY_INBOUND_JSON RELAY_ROUTING_RULE_JSON
 	export REALITY_SHORT_IDS_JSON FIRST_SHORT_ID REALITY_SERVER_NAMES_JSON GOST_ARGS
 }
 
@@ -650,6 +671,9 @@ persist_cli_overrides() {
 	[ -n "${_cli_HYSTERIA_HOP_INTERVAL:-}" ] && upsert_env_var HYSTERIA_HOP_INTERVAL "$_cli_HYSTERIA_HOP_INTERVAL"
 	[ -n "${_cli_HYSTERIA_SNI:-}" ] && upsert_env_var HYSTERIA_SNI "$_cli_HYSTERIA_SNI"
 	[ -n "${_cli_HYSTERIA_CF_DNS_TOKEN:-}" ] && upsert_env_var HYSTERIA_CF_DNS_TOKEN "$_cli_HYSTERIA_CF_DNS_TOKEN"
+	[ -n "${_cli_RELAY_ENABLE:-}" ] && upsert_env_var RELAY_ENABLE "$_cli_RELAY_ENABLE"
+	[ -n "${_cli_RELAY_LISTEN_PORT:-}" ] && upsert_env_var RELAY_LISTEN_PORT "$_cli_RELAY_LISTEN_PORT"
+	[ -n "${_cli_RELAY_FORWARD:-}" ] && upsert_env_var RELAY_FORWARD "$_cli_RELAY_FORWARD"
 	[ -n "${_cli_GOST_ENABLE:-}" ] && upsert_env_var GOST_ENABLE "$_cli_GOST_ENABLE"
 	[ -n "${_cli_GOST_LISTEN_PORT:-}" ] && upsert_env_var GOST_LISTEN_PORT "$_cli_GOST_LISTEN_PORT"
 	[ -n "${_cli_GOST_FORWARD_TCP:-}" ] && upsert_env_var GOST_FORWARD_TCP "$_cli_GOST_FORWARD_TCP"
@@ -686,7 +710,8 @@ render_template() {
 		-e "s|\${BLOCKED_UDP_RULE}|$(escape_sed "${BLOCKED_UDP_RULE:-}")|g" \
 		-e "s|\${TCP_KEEPALIVE_IDLE}|$(escape_sed "${TCP_KEEPALIVE_IDLE}")|g" \
 		-e "s|\${TCP_KEEPALIVE_INTERVAL}|$(escape_sed "${TCP_KEEPALIVE_INTERVAL}")|g" \
-		-e "s|\${TCP_USER_TIMEOUT}|$(escape_sed "${TCP_USER_TIMEOUT}")|g" \
+		-e "s|\${RELAY_INBOUND_JSON}|$(escape_sed "${RELAY_INBOUND_JSON:-}")|g" \
+		-e "s|\${RELAY_ROUTING_RULE_JSON}|$(escape_sed "${RELAY_ROUTING_RULE_JSON:-}")|g" \
 		-e "s|\${GOGC}|$(escape_sed "${GOGC}")|g" \
 		-e "s|\${GOMAXPROCS}|$(escape_sed "${GOMAXPROCS}")|g" \
 		-e "s|\${XRAY_GOMEMLIMIT}|$(escape_sed "${XRAY_GOMEMLIMIT}")|g" \
@@ -958,6 +983,16 @@ refresh_hosts_cache() {
 		hosts_to_pin="${REALITY_DEST%:*}"
 	fi
 
+	if [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ]; then
+		thost="${RELAY_FORWARD%:*}"
+		if [ -n "$thost" ]; then
+			case " $hosts_to_pin " in
+				*" $thost "*) ;;
+				*) hosts_to_pin="${hosts_to_pin:+$hosts_to_pin }${thost}" ;;
+			esac
+		fi
+	fi
+
 	if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		for item in $(printf '%s %s' "${GOST_FORWARD_TCP:-}" "${GOST_FORWARD_UDP:-}" | tr ',' ' '); do
 			target="${item#*/}"
@@ -1119,6 +1154,9 @@ configure_firewall() {
 	if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
 		if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 			ufw allow "${VLESS_LISTEN_PORT}/tcp" comment "surge vless (${NODE_NAME})" >/dev/null 2>&1 || true
+			if [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ]; then
+				ufw allow "${RELAY_LISTEN_PORT:-80}/tcp" comment "surge xray relay (${NODE_NAME})" >/dev/null 2>&1 || true
+			fi
 		fi
 		if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 			ufw allow "${HYSTERIA_LISTEN_PORT}/udp" comment "surge hysteria2 (${NODE_NAME})" >/dev/null 2>&1 || true

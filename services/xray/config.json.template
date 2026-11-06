@@ -59,14 +59,13 @@
           "tcpFastOpen": false,
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
-          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
-          "tcpUserTimeout": 10000
+          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL}
         }
       },
       "sniffing": {
         "enabled": false
       }
-    }
+    }${RELAY_INBOUND_JSON}
   ],
   "outbounds": [
     {
@@ -78,16 +77,10 @@
       "streamSettings": {
         "sockopt": {
           "domainStrategy": "UseIPv4",
-          "happyEyeballs": {
-            "tryDelayMs": 250,
-            "maxConcurrentTry": 4,
-            "prioritizeIPv6": false
-          },
           "tcpFastOpen": false,
           "tcpCongestion": "bbr",
           "tcpKeepAliveIdle": ${TCP_KEEPALIVE_IDLE},
-          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL},
-          "tcpUserTimeout": 10000
+          "tcpKeepAliveInterval": ${TCP_KEEPALIVE_INTERVAL}
         }
       }
     },
@@ -100,6 +93,7 @@
   "routing": {
     "domainStrategy": "AsIs",
     "rules": [
+      ${RELAY_ROUTING_RULE_JSON}
       ${BLOCKED_UDP_RULE}
       {
         "type": "field",

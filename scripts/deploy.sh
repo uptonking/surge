@@ -56,6 +56,9 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	fi
 	svc_enable_and_restart xray
 	log "xray enabled and started on TCP :${VLESS_LISTEN_PORT} (public ${NODE_HOST}:${PUBLIC_VLESS_PORT})"
+	if [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ]; then
+		log "xray dokodemo-door relay active on TCP :${RELAY_LISTEN_PORT:-80} -> ${RELAY_FORWARD}"
+	fi
 else
 	svc_disable_and_stop xray
 fi
