@@ -142,11 +142,19 @@ apply_kernel_tuning() {
 	sysctl -w net.ipv4.tcp_orphan_retries=2 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_fin_timeout=10 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_tw_reuse=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_keepalive_time=30 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_keepalive_intvl=10 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_keepalive_probes=3 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_retries2=8 >/dev/null 2>&1 || true
 	if [ -d /etc/sysctl.d ]; then
 		cat > /etc/sysctl.d/99-surge-tcp.conf <<'EOF'
 net.ipv4.tcp_orphan_retries = 2
 net.ipv4.tcp_fin_timeout = 10
 net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_keepalive_time = 30
+net.ipv4.tcp_keepalive_intvl = 10
+net.ipv4.tcp_keepalive_probes = 3
+net.ipv4.tcp_retries2 = 8
 EOF
 	fi
 }
@@ -281,6 +289,13 @@ load_env() {
 		BLOCKED_IPS_JSON='["10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10"]'
 	else
 		BLOCKED_IPS_JSON='["10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","::1/128","fc00::/7","fe80::/10","::/0"]'
+	fi
+
+	# Outbound UDP blocking for NAT nodes with bad vendor UDP support
+	if [ "${UDP_DISABLE:-0}" = "1" ]; then
+		BLOCKED_UDP_RULE='{"type": "field", "network": "udp", "outboundTag": "blocked"},'
+	else
+		BLOCKED_UDP_RULE=''
 	fi
 
 	GOST_ARGS=""
@@ -601,6 +616,7 @@ render_template() {
 		-e "s|\${REALITY_MAX_TIME_DIFF}|$(escape_sed "${REALITY_MAX_TIME_DIFF}")|g" \
 		-e "s|\${REALITY_SHORT_IDS_JSON}|$(escape_sed "${REALITY_SHORT_IDS_JSON}")|g" \
 		-e "s|\${BLOCKED_IPS_JSON}|$(escape_sed "${BLOCKED_IPS_JSON}")|g" \
+		-e "s|\${BLOCKED_UDP_RULE}|$(escape_sed "${BLOCKED_UDP_RULE:-}")|g" \
 		-e "s|\${TCP_KEEPALIVE_IDLE}|$(escape_sed "${TCP_KEEPALIVE_IDLE}")|g" \
 		-e "s|\${TCP_KEEPALIVE_INTERVAL}|$(escape_sed "${TCP_KEEPALIVE_INTERVAL}")|g" \
 		-e "s|\${TCP_USER_TIMEOUT}|$(escape_sed "${TCP_USER_TIMEOUT}")|g" \

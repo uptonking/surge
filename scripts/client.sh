@@ -20,15 +20,20 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 
 	printf 'vless URI:\n  %s\n\n' "$vless_uri"
 	printf 'ClashX Meta VLESS proxy entry:\n'
-	printf "  - { name: '%s', type: vless, server: %s, port: %s, uuid: '%s', network: tcp, udp: true, packet-encoding: xudp, tls: true, servername: '%s', flow: 'xtls-rprx-vision', client-fingerprint: %s, reality-opts: { public-key: '%s', short-id: '%s' }, tfo: true }\n" \
-		"$DISPLAY_NAME" "$NODE_HOST" "$PUBLIC_VLESS_PORT" "$VLESS_UUID" "$REALITY_SNI" "$REALITY_FINGERPRINT" "$REALITY_PUBLIC_KEY" "$FIRST_SHORT_ID"
+	if [ "${UDP_DISABLE:-0}" = "1" ]; then
+		printf "  - { name: '%s', type: vless, server: %s, port: %s, uuid: '%s', network: tcp, udp: false, tls: true, servername: '%s', flow: 'xtls-rprx-vision', client-fingerprint: %s, reality-opts: { public-key: '%s', short-id: '%s' }, tfo: false }\n" \
+			"$DISPLAY_NAME" "$NODE_HOST" "$PUBLIC_VLESS_PORT" "$VLESS_UUID" "$REALITY_SNI" "$REALITY_FINGERPRINT" "$REALITY_PUBLIC_KEY" "$FIRST_SHORT_ID"
+	else
+		printf "  - { name: '%s', type: vless, server: %s, port: %s, uuid: '%s', network: tcp, udp: true, packet-encoding: xudp, tls: true, servername: '%s', flow: 'xtls-rprx-vision', client-fingerprint: %s, reality-opts: { public-key: '%s', short-id: '%s' }, tfo: false }\n" \
+			"$DISPLAY_NAME" "$NODE_HOST" "$PUBLIC_VLESS_PORT" "$VLESS_UUID" "$REALITY_SNI" "$REALITY_FINGERPRINT" "$REALITY_PUBLIC_KEY" "$FIRST_SHORT_ID"
+	fi
 
 	if [ -n "${PUBLIC_RELAY_HOST:-}" ] && [ -n "${PUBLIC_RELAY_PORT:-}" ]; then
 		relay_name="${PUBLIC_RELAY_NAME:-${DISPLAY_NAME}-Relay}"
 		relay_uri="vless://${VLESS_UUID}@${PUBLIC_RELAY_HOST}:${PUBLIC_RELAY_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=${REALITY_FINGERPRINT}&pbk=${REALITY_PUBLIC_KEY}&sid=${FIRST_SHORT_ID}&type=tcp#${relay_name}"
 		printf '\nRelay via %s (%s:%s -> %s:%s):\n' "$relay_name" "$PUBLIC_RELAY_HOST" "$PUBLIC_RELAY_PORT" "$NODE_HOST" "$PUBLIC_VLESS_PORT"
 		printf '  %s\n' "$relay_uri"
-		printf "  - { name: '%s', type: vless, server: %s, port: %s, uuid: '%s', network: tcp, udp: true, packet-encoding: xudp, tls: true, servername: '%s', flow: 'xtls-rprx-vision', client-fingerprint: %s, reality-opts: { public-key: '%s', short-id: '%s' }, tfo: true }\n" \
+		printf "  - { name: '%s', type: vless, server: %s, port: %s, uuid: '%s', network: tcp, udp: false, tls: true, servername: '%s', flow: 'xtls-rprx-vision', client-fingerprint: %s, reality-opts: { public-key: '%s', short-id: '%s' }, tfo: false }\n" \
 			"$relay_name" "$PUBLIC_RELAY_HOST" "$PUBLIC_RELAY_PORT" "$VLESS_UUID" "$REALITY_SNI" "$REALITY_FINGERPRINT" "$REALITY_PUBLIC_KEY" "$FIRST_SHORT_ID"
 	fi
 else
