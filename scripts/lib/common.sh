@@ -169,9 +169,9 @@ apply_kernel_tuning() {
 	fi
 	sysctl -w net.ipv4.tcp_orphan_retries=2 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_fin_timeout=10 >/dev/null 2>&1 || true
-	sysctl -w net.ipv4.tcp_tw_reuse=0 >/dev/null 2>&1 || true
-	sysctl -w net.ipv4.tcp_timestamps=0 >/dev/null 2>&1 || true
-	sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_tw_reuse=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_rfc1337=0 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_synack_retries=2 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_syn_retries=3 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.conf.all.rp_filter=1 >/dev/null 2>&1 || true
@@ -186,9 +186,9 @@ apply_kernel_tuning() {
 		cat > /etc/sysctl.d/99-surge-tcp.conf <<EOF
 net.ipv4.tcp_orphan_retries = 2
 net.ipv4.tcp_fin_timeout = 10
-net.ipv4.tcp_tw_reuse = 0
-net.ipv4.tcp_timestamps = 0
-net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_rfc1337 = 0
 net.ipv4.tcp_synack_retries = 2
 net.ipv4.tcp_syn_retries = 3
 net.ipv4.conf.all.rp_filter = 1
@@ -1089,8 +1089,8 @@ net.ipv4.tcp_window_scaling=1
 net.ipv4.tcp_adv_win_scale=1
 net.ipv4.tcp_sack=1
 net.ipv4.tcp_dsack=1
-net.ipv4.tcp_timestamps=0
-net.ipv4.tcp_rfc1337=1
+net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_rfc1337=0
 net.ipv4.tcp_synack_retries=2
 net.ipv4.tcp_syn_retries=3
 net.ipv4.conf.all.rp_filter=1
@@ -1100,7 +1100,7 @@ net.ipv4.tcp_notsent_lowat=16384
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_slow_start_after_idle=0
 net.ipv4.tcp_tw_reuse=1
-net.ipv4.tcp_fin_timeout=15
+net.ipv4.tcp_fin_timeout=10
 net.ipv4.tcp_orphan_retries=2
 net.ipv4.tcp_retries2=8
 net.ipv4.tcp_keepalive_time=60

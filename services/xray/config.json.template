@@ -5,15 +5,38 @@
     "loglevel": "warning"
   },
   "dns": {
+    "hosts": {
+      "www.gstatic.com": [
+        "142.251.157.120",
+        "142.251.155.120",
+        "142.251.156.120",
+        "142.251.154.120"
+      ],
+      "cp.cloudflare.com": [
+        "1.1.1.1",
+        "1.0.0.1"
+      ],
+      "www.google.com": [
+        "142.251.157.100",
+        "142.251.155.100"
+      ],
+      "www.yahoo.com": [
+        "74.6.231.20",
+        "74.6.231.21",
+        "98.137.11.163",
+        "98.137.11.164"
+      ]
+    },
     "servers": [
-      "localhost",
-      "https://8.8.8.8/dns-query",
-      "https://1.1.1.1/dns-query"
+      "1.1.1.1",
+      "8.8.8.8",
+      "localhost"
     ],
     "queryStrategy": "UseIPv4",
     "enableParallelQuery": true,
     "serveStale": true,
-    "serveExpiredTTL": 86400
+    "serveExpiredTTL": 86400,
+    "cacheStrategy": "CacheOnDemand"
   },
   "policy": {
     "levels": {
