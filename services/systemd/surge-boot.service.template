@@ -1,0 +1,14 @@
+[Unit]
+Description=Surge Boot Initialization (BBR, Hosts Cache, Port Hopping)
+Documentation=https://github.com/uptonking/surge
+DefaultDependencies=no
+After=local-fs.target network.target
+Before=xray.service hysteria.service gost.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${SURGE_ROOT}/scripts/boot.sh
+
+[Install]
+WantedBy=multi-user.target

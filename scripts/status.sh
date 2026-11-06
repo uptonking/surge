@@ -53,6 +53,9 @@ else
 	printf 'gost     : disabled (GOST_ENABLE=0)\n'
 fi
 
+boot_stat="disabled"
+svc_is_enabled surge-boot && boot_stat="enabled"
+printf 'boot-sync: %s (surge-boot)\n' "$boot_stat"
 printf 'watchdog : %s\n' "$(watchdog_status)"
 
 printf '\n=== Listening Sockets ===\n'

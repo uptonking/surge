@@ -1,8 +1,8 @@
 [Unit]
 Description=Xray Service (VLESS + Reality + Vision)
 Documentation=https://github.com/xtls/xray-core
-After=network.target network-online.target nss-lookup.target
-Wants=network-online.target
+After=network.target network-online.target nss-lookup.target surge-boot.service
+Wants=network-online.target surge-boot.service
 StartLimitIntervalSec=0
 
 [Service]

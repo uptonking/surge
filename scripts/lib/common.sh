@@ -312,7 +312,30 @@ load_env() {
 		HYSTERIA_SKIP_CERT_VERIFY="true"
 	fi
 	if [ -n "${HYSTERIA_HOP_PORTS:-}" ]; then
-		HYSTERIA_CLIENT_PORTS="${PUBLIC_HYSTERIA_PORT},${HYSTERIA_HOP_PORTS}"
+		is_in_range=0
+		for item in $(printf '%s' "$HYSTERIA_HOP_PORTS" | tr ',' ' '); do
+			case "$item" in
+				*-*)
+					hp_lo="${item%%-*}"
+					hp_hi="${item##*-}"
+					if [ "$PUBLIC_HYSTERIA_PORT" -ge "$hp_lo" ] && [ "$PUBLIC_HYSTERIA_PORT" -le "$hp_hi" ]; then
+						is_in_range=1
+						break
+					fi
+					;;
+				*)
+					if [ "$PUBLIC_HYSTERIA_PORT" -eq "$item" ]; then
+						is_in_range=1
+						break
+					fi
+					;;
+			esac
+		done
+		if [ "$is_in_range" -eq 1 ]; then
+			HYSTERIA_CLIENT_PORTS="${HYSTERIA_HOP_PORTS}"
+		else
+			HYSTERIA_CLIENT_PORTS="${PUBLIC_HYSTERIA_PORT},${HYSTERIA_HOP_PORTS}"
+		fi
 	else
 		HYSTERIA_CLIENT_PORTS=""
 	fi
@@ -1199,6 +1222,20 @@ svc_disable_and_stop() {
 		rc-service "$svc" stop >/dev/null 2>&1 || true
 		rc-update del "$svc" default >/dev/null 2>&1 || true
 		rm -f "/etc/init.d/${svc}"
+	fi
+}
+
+install_boot_service() {
+	if [ "$INIT_SYSTEM" = "systemd" ]; then
+		render_template "${SURGE_ROOT}/services/systemd/surge-boot.service.template" /etc/systemd/system/surge-boot.service
+		systemctl daemon-reload
+		systemctl enable surge-boot.service >/dev/null 2>&1
+		systemctl start surge-boot.service >/dev/null 2>&1 || true
+	elif [ "$INIT_SYSTEM" = "openrc" ]; then
+		render_template "${SURGE_ROOT}/services/openrc/surge-boot.initd.template" /etc/init.d/surge-boot
+		chmod 0755 /etc/init.d/surge-boot
+		rc-update add surge-boot boot >/dev/null 2>&1 || true
+		rc-service surge-boot start >/dev/null 2>&1 || true
 	fi
 }
 

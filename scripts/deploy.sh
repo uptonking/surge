@@ -115,6 +115,7 @@ fi
 
 refresh_hosts_cache
 configure_firewall
+install_boot_service
 install_watchdog
 
 log "=== deploy complete ==="

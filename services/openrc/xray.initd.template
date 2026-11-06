@@ -13,7 +13,7 @@ error_log="/var/log/xray.log"
 
 depend() {
 	need net
-	after firewall
+	after firewall surge-boot
 }
 
 start_pre() {

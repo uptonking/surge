@@ -111,9 +111,9 @@ pass "POSIX sh syntax valid for all scripts"
 
 # 1b. Rendered service definitions must not contain unresolved ${VAR} placeholders
 if [ "$INIT_SYSTEM" = "systemd" ]; then
-	unit_glob="/etc/systemd/system/xray.service /etc/systemd/system/hysteria.service /etc/systemd/system/gost.service"
+	unit_glob="/etc/systemd/system/xray.service /etc/systemd/system/hysteria.service /etc/systemd/system/gost.service /etc/systemd/system/surge-boot.service"
 else
-	unit_glob="/etc/init.d/xray /etc/init.d/hysteria /etc/init.d/gost"
+	unit_glob="/etc/init.d/xray /etc/init.d/hysteria /etc/init.d/gost /etc/init.d/surge-boot"
 fi
 for uf in $unit_glob; do
 	[ -f "$uf" ] || continue
@@ -122,6 +122,10 @@ for uf in $unit_glob; do
 	fi
 done
 pass "rendered service definitions have no unresolved placeholders"
+
+# 1c. Surge boot synchronization service
+svc_is_enabled surge-boot || fail "surge-boot service is not enabled on boot"
+pass "surge-boot service installed and enabled on boot"
 
 # 2. Xray config & service health
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then

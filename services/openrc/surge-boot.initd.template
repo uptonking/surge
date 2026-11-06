@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+
+name="surge-boot"
+description="Surge Boot Initialization (BBR, Hosts Cache, Port Hopping)"
+
+depend() {
+	need localmount
+	before net firewall xray hysteria gost
+}
+
+start() {
+	ebegin "Initializing surge boot state"
+	"${SURGE_ROOT}/scripts/boot.sh" >/dev/null 2>&1
+	eend $?
+}
