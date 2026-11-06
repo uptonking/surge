@@ -13,6 +13,7 @@ detect_resources
 load_env
 
 [ -f /etc/sysctl.d/99-bbr.conf ] && sysctl -q -p /etc/sysctl.d/99-bbr.conf >/dev/null 2>&1 || true
+[ -f /etc/sysctl.d/99-surge-tcp.conf ] && sysctl -q -p /etc/sysctl.d/99-surge-tcp.conf >/dev/null 2>&1 || true
 refresh_hosts_cache || true
 
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then

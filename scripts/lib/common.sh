@@ -97,35 +97,58 @@ detect_resources() {
 	DISK_AVAIL_MB="$(df -Pm / | awk 'NR==2 {print $4}' 2>/dev/null || echo 500)"
 
 	NCPU="$(nproc 2>/dev/null || echo 1)"
-	GOGC="100"
-	if [ "$NCPU" -ge 2 ]; then
-		GOMAXPROCS="$NCPU"
-	else
-		GOMAXPROCS="1"
+	GOGC="${GOGC:-100}"
+	if [ -z "${GOMAXPROCS:-}" ]; then
+		if [ "$NCPU" -ge 2 ]; then
+			GOMAXPROCS="$NCPU"
+		else
+			GOMAXPROCS="1"
+		fi
+	fi
+
+	if [ -z "${XRAY_GOMEMLIMIT:-}" ]; then
+		if [ "$MEM_MB" -le 320 ]; then
+			XRAY_GOMEMLIMIT="160MiB"
+		elif [ "$MEM_MB" -le 512 ]; then
+			XRAY_GOMEMLIMIT="200MiB"
+		else
+			XRAY_GOMEMLIMIT="512MiB"
+		fi
+	fi
+
+	if [ -z "${HYSTERIA_GOMEMLIMIT:-}" ]; then
+		if [ "$MEM_MB" -le 320 ]; then
+			HYSTERIA_GOMEMLIMIT="140MiB"
+		elif [ "$MEM_MB" -le 512 ]; then
+			HYSTERIA_GOMEMLIMIT="200MiB"
+		else
+			HYSTERIA_GOMEMLIMIT="512MiB"
+		fi
+	fi
+
+	if [ -z "${GOST_GOMEMLIMIT:-}" ]; then
+		if [ "$MEM_MB" -le 320 ]; then
+			GOST_GOMEMLIMIT="96MiB"
+		elif [ "$MEM_MB" -le 512 ]; then
+			GOST_GOMEMLIMIT="96MiB"
+		else
+			GOST_GOMEMLIMIT="256MiB"
+		fi
 	fi
 
 	if [ "$MEM_MB" -le 320 ]; then
-		XRAY_GOMEMLIMIT="160MiB"
-		HYSTERIA_GOMEMLIMIT="140MiB"
-		GOST_GOMEMLIMIT="96MiB"
 		HYSTERIA_INIT_STREAM_WIN="1048576"
 		HYSTERIA_MAX_STREAM_WIN="8388608"
 		HYSTERIA_INIT_CONN_WIN="2621440"
 		HYSTERIA_MAX_CONN_WIN="20971520"
 		HYSTERIA_MAX_STREAMS="512"
 	elif [ "$MEM_MB" -le 512 ]; then
-		XRAY_GOMEMLIMIT="300MiB"
-		HYSTERIA_GOMEMLIMIT="256MiB"
-		GOST_GOMEMLIMIT="160MiB"
 		HYSTERIA_INIT_STREAM_WIN="1048576"
 		HYSTERIA_MAX_STREAM_WIN="8388608"
 		HYSTERIA_INIT_CONN_WIN="2621440"
 		HYSTERIA_MAX_CONN_WIN="20971520"
 		HYSTERIA_MAX_STREAMS="1024"
 	else
-		XRAY_GOMEMLIMIT="512MiB"
-		HYSTERIA_GOMEMLIMIT="512MiB"
-		GOST_GOMEMLIMIT="256MiB"
 		HYSTERIA_INIT_STREAM_WIN="1048576"
 		HYSTERIA_MAX_STREAM_WIN="8388608"
 		HYSTERIA_INIT_CONN_WIN="2621440"
@@ -138,23 +161,34 @@ detect_resources() {
 }
 
 apply_kernel_tuning() {
-	# Prevent dead TCP connections from lingering in LAST-ACK / FIN-WAIT on NAT & LXC nodes
+	# Prevent dead TCP connections and PAWS drops on NAT & LXC nodes
+	if [ "${MEM_MB:-1024}" -le 512 ]; then
+		tcp_buf_max="4194304"
+	else
+		tcp_buf_max="16777216"
+	fi
 	sysctl -w net.ipv4.tcp_orphan_retries=2 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_fin_timeout=10 >/dev/null 2>&1 || true
-	sysctl -w net.ipv4.tcp_tw_reuse=1 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_tw_reuse=0 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_timestamps=0 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_keepalive_time=30 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_keepalive_intvl=10 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_keepalive_probes=3 >/dev/null 2>&1 || true
 	sysctl -w net.ipv4.tcp_retries2=8 >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_rmem="4096 87380 ${tcp_buf_max}" >/dev/null 2>&1 || true
+	sysctl -w net.ipv4.tcp_wmem="4096 65536 ${tcp_buf_max}" >/dev/null 2>&1 || true
 	if [ -d /etc/sysctl.d ]; then
-		cat > /etc/sysctl.d/99-surge-tcp.conf <<'EOF'
+		cat > /etc/sysctl.d/99-surge-tcp.conf <<EOF
 net.ipv4.tcp_orphan_retries = 2
 net.ipv4.tcp_fin_timeout = 10
-net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_tw_reuse = 0
+net.ipv4.tcp_timestamps = 0
 net.ipv4.tcp_keepalive_time = 30
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_retries2 = 8
+net.ipv4.tcp_rmem = 4096 87380 ${tcp_buf_max}
+net.ipv4.tcp_wmem = 4096 65536 ${tcp_buf_max}
 EOF
 	fi
 }
@@ -930,6 +964,15 @@ tune_os() {
 	detect_os
 	detect_resources
 
+	# Determine max TCP socket buffer based on available RAM to prevent cgroup socket throttling
+	if [ "$MEM_MB" -le 512 ]; then
+		tcp_buf_max="4194304"
+	elif [ "$MEM_MB" -le 1024 ]; then
+		tcp_buf_max="16777216"
+	else
+		tcp_buf_max="67108864"
+	fi
+
 	# Probe and persist BBR + TCP socket tuning to /etc/sysctl.d/99-bbr.conf
 	mkdir -p /etc/sysctl.d
 	rm -f /etc/sysctl.d/99-surge.conf 2>/dev/null || true
@@ -941,25 +984,25 @@ tune_os() {
 		if sys_out="$(sysctl -w "${k}=${v}" 2>&1)" && ! printf '%s' "$sys_out" | grep -qiE 'error|cannot|denied|permitted|invalid|read-only|unknown'; then
 			printf '%s=%s\n' "$k" "$v" >> /etc/sysctl.d/99-bbr.conf
 		fi
-	done <<'EOF'
+	done <<EOF
 net.ipv4.tcp_congestion_control=bbr
 net.core.default_qdisc=fq
 net.ipv4.tcp_fastopen=3
-net.core.rmem_max=67108864
-net.core.wmem_max=67108864
-net.ipv4.tcp_rmem=4096 87380 67108864
-net.ipv4.tcp_wmem=4096 65536 67108864
+net.core.rmem_max=${tcp_buf_max}
+net.core.wmem_max=${tcp_buf_max}
+net.ipv4.tcp_rmem=4096 87380 ${tcp_buf_max}
+net.ipv4.tcp_wmem=4096 65536 ${tcp_buf_max}
 net.ipv4.tcp_moderate_rcvbuf=1
 net.ipv4.tcp_window_scaling=1
 net.ipv4.tcp_adv_win_scale=1
 net.ipv4.tcp_sack=1
 net.ipv4.tcp_dsack=1
-net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_timestamps=0
 net.ipv4.tcp_ecn=0
 net.ipv4.tcp_notsent_lowat=16384
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_slow_start_after_idle=0
-net.ipv4.tcp_tw_reuse=1
+net.ipv4.tcp_tw_reuse=0
 net.ipv4.tcp_fin_timeout=10
 net.ipv4.tcp_orphan_retries=2
 net.ipv4.tcp_retries2=8
