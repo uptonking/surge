@@ -436,7 +436,7 @@ install_base_packages() {
 	case "$OS_ID" in
 		debian|ubuntu)
 			missing=""
-			for pkg_cmd in "curl:curl" "unzip:unzip" "openssl:openssl" "ca-certificates:update-ca-certificates" $need_iptables; do
+			for pkg_cmd in "curl:curl" "unzip:unzip" "openssl:openssl" "ca-certificates:update-ca-certificates" "iproute2:ss" $need_iptables; do
 				pkg="${pkg_cmd%%:*}"
 				cmd="${pkg_cmd#*:}"
 				command -v "$cmd" >/dev/null 2>&1 || missing="${missing} ${pkg}"

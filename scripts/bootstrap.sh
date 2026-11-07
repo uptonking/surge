@@ -23,6 +23,9 @@ fi
 if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	install_hysteria
 fi
+if [ "${GOST_ENABLE:-0}" = "1" ]; then
+	install_gost
+fi
 ensure_secrets
 
 exec "${SCRIPT_DIR}/deploy.sh" "${NODE_NAME}"

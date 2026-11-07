@@ -20,6 +20,8 @@ Mac Client (ClashX Meta: ~/.config/clash.meta/verge2609.yaml)
   ├──► Surge        : surge.aichorage.de:443/tcp      ─────────────────────────────────────────► surge Xray (Debian 12 / systemd)
   ├──► Surge-Hy2    : surge.aichorage.de:443,20000-30000/udp ──────────────────────────────────► surge Hysteria2 (Debian 12 / systemd)
   │
+  ├──► Surging      : surging.aichorage.de:23101      ──► NAT 23101->443/tcp ──► surging Xray (Debian 13 / systemd)
+  ├──► Surging-Relay: surging.aichorage.de:23102      ──► NAT 23102->80/tcp  ──► surging gost ──► verge2.aichorage.de:8443
   ├──► Surge1       : surge1.aichorage.de:23111       ──► NAT 23111->443/tcp ──► surge1 Xray (Debian 13 / systemd)
   ├──► Surge2       : surge2.aichorage.de:23121       ──► NAT 23121->443/tcp ──► surge2 Xray (Alpine 3.23 / OpenRC)
   ├──► Surge3       : surge3.aichorage.de:23131       ──► NAT 23131->443/tcp ──► surge3 Xray (Alpine 3.23 / OpenRC)
@@ -44,7 +46,7 @@ Mac Client (ClashX Meta: ~/.config/clash.meta/verge2609.yaml)
 ```sh
 git clone https://github.com/uptonking/surge.git /opt/surge
 cd /opt/surge
-./scripts/bootstrap.sh <node_name>   # e.g. surge, surge1, surge2, surge3, verge2, stash1, stash2, verge4
+./scripts/bootstrap.sh <node_name>   # e.g. surge, surging, surge1, surge2, surge3, verge2, stash1, stash2, verge4
 ```
 
 ### 2. Deploying to Any Ad-Hoc VPS (Without Creating a Profile First)

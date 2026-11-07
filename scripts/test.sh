@@ -11,7 +11,7 @@ SURGE_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 if [ "${1:-}" = "--remote" ]; then
 	shift
-	nodes="${*:-surge surge1 surge2 surge3 verge2 stash1 stash2 verge4}"
+	nodes="${*:-surge surging surge1 surge2 surge3 verge2 stash1 stash2 verge4}"
 
 	measure_clash_delay() {
 		m_pname="$1"
@@ -40,7 +40,7 @@ if [ "${1:-}" = "--remote" ]; then
 		printf '=== Remote Verify: %s (%s) ===\n' "$n" "$ssh_target"
 		ssh -o ConnectTimeout=8 "$ssh_target" '/opt/surge/scripts/test.sh' || {
 			case "$n" in
-				surge1|surge2|surge3|stash1|stash2)
+				surging|surge1|surge2|surge3|stash1|stash2)
 					printf '  [WARN] Remote self-test on %s unreachable/skipped due to vendor TCP issue\n' "$n"
 					continue
 					;;
@@ -55,7 +55,7 @@ if [ "${1:-}" = "--remote" ]; then
 					printf '  [PASS] ClashX Meta %-14s -> %s\n' "$hy_name" "$delay"
 				else
 					case "$n" in
-						surge1|surge2|surge3|stash1|stash2)
+						surging|surge1|surge2|surge3|stash1|stash2)
 							printf '  [WARN] ClashX Meta %-14s -> UDP/TCP pending vendor network check (%s)\n' "$hy_name" "$delay"
 							;;
 						*)
@@ -72,7 +72,7 @@ if [ "${1:-}" = "--remote" ]; then
 					printf '  [PASS] ClashX Meta %-14s -> %s\n' "$pname" "$delay"
 				else
 					case "$pname" in
-						Stash*|Surge1*|Surge2*|Surge3*)
+						Surging*|Stash*|Surge1*|Surge2*|Surge3*)
 							printf '  [WARN] ClashX Meta %-14s -> TCP path on NAT cluster pending vendor fix\n' "$pname"
 							;;
 						*)

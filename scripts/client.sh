@@ -62,6 +62,10 @@ if [ "${HYSTERIA_ENABLE:-0}" = "1" ]; then
 	fi
 fi
 
-if [ "${XRAY_ENABLE:-1}" = "0" ] && [ "${HYSTERIA_ENABLE:-0}" = "0" ] && [ "${GOST_ENABLE:-0}" = "1" ]; then
-	printf 'gost service args: %s\n' "$GOST_ARGS"
+if [ "${GOST_ENABLE:-0}" = "1" ]; then
+	printf '\ngost forwarding active:\n'
+	printf '  args: %s\n' "$GOST_ARGS"
+	if [ -n "${GOST_FORWARD_TCP:-}" ]; then
+		printf '  forward: :%s -> %s\n' "${GOST_LISTEN_PORT}" "$GOST_FORWARD_TCP"
+	fi
 fi
