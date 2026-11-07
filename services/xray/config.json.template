@@ -12,6 +12,12 @@
         "142.251.156.120",
         "142.251.154.120"
       ],
+      "connectivitycheck.gstatic.com": [
+        "142.251.157.120",
+        "142.251.155.120",
+        "142.251.156.120",
+        "142.251.154.120"
+      ],
       "cp.cloudflare.com": [
         "1.1.1.1",
         "1.0.0.1"
@@ -25,6 +31,13 @@
         "74.6.231.21",
         "98.137.11.163",
         "98.137.11.164"
+      ],
+      "connect.rom.miui.com": [
+        "119.29.29.29",
+        "180.101.50.245"
+      ],
+      "msftconnecttest.com": [
+        "13.107.4.52"
       ]
     },
     "servers": [
@@ -41,11 +54,11 @@
   "policy": {
     "levels": {
       "0": {
-        "handshake": 20,
+        "handshake": 15,
         "connIdle": 300,
-        "uplinkOnly": 6,
-        "downlinkOnly": 10,
-        "bufferSize": 256
+        "uplinkOnly": 4,
+        "downlinkOnly": 8,
+        "bufferSize": 512
       }
     }
   },
@@ -95,7 +108,7 @@
       "tag": "direct",
       "protocol": "freedom",
       "settings": {
-        "domainStrategy": "UseIPv4"
+        "domainStrategy": "UseIP"
       },
       "streamSettings": {
         "sockopt": {
