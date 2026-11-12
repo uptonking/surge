@@ -69,3 +69,8 @@ if [ "${GOST_ENABLE:-0}" = "1" ]; then
 		printf '  forward: :%s -> %s\n' "${GOST_LISTEN_PORT}" "$GOST_FORWARD_TCP"
 	fi
 fi
+
+if [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ]; then
+	printf '\nXray dokodemo-door relay active:\n'
+	printf '  forward: :%s -> %s\n' "${RELAY_LISTEN_PORT:-80}" "$RELAY_FORWARD"
+fi

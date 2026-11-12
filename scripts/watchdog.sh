@@ -17,7 +17,13 @@ load_env
 refresh_hosts_cache || true
 
 if [ "${XRAY_ENABLE:-1}" = "1" ]; then
+	xray_needs_restart=0
 	if ! svc_is_active xray || ! port_is_listening tcp "$VLESS_LISTEN_PORT"; then
+		xray_needs_restart=1
+	elif [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ] && ! port_is_listening tcp "${RELAY_LISTEN_PORT:-80}"; then
+		xray_needs_restart=1
+	fi
+	if [ "$xray_needs_restart" -eq 1 ]; then
 		svc_restart xray >/dev/null 2>&1 || svc_enable_and_restart xray >/dev/null 2>&1 || true
 	fi
 fi

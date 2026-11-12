@@ -133,6 +133,11 @@ if [ "${XRAY_ENABLE:-1}" = "1" ]; then
 	port_is_listening tcp "$VLESS_LISTEN_PORT" || fail "xray is not listening on tcp/${VLESS_LISTEN_PORT}"
 	pass "xray config valid, service running & boot-enabled, listening on tcp/${VLESS_LISTEN_PORT}"
 
+	if [ "${RELAY_ENABLE:-0}" = "1" ] && [ -n "${RELAY_FORWARD:-}" ]; then
+		port_is_listening tcp "${RELAY_LISTEN_PORT:-80}" || fail "xray dokodemo-door relay is not listening on tcp/${RELAY_LISTEN_PORT:-80}"
+		pass "xray dokodemo-door relay running & listening on tcp/${RELAY_LISTEN_PORT:-80} -> ${RELAY_FORWARD}"
+	fi
+
 	# 3. Reality camouflage target reachability & /etc/hosts cache
 	reality_host="${REALITY_DEST%:*}"
 	grep -q "^# BEGIN SURGE HOSTS" /etc/hosts || fail "/etc/hosts missing SURGE HOSTS block"
